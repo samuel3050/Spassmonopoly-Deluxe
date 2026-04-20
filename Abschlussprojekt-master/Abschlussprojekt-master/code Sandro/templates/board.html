@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Saufmonopoly</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #f4f4f4 0%, #e0e0e0 100%);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .board-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(11, minmax(24px, 4vw));
+      grid-template-rows: repeat(11, minmax(24px, 4vw));
+      gap: 1px;
+      background: #fff; /* <-- Mitte weiß */
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.10);
+      margin-bottom: 16px;
+    }
+
+    .feld {
+      background-color: #2e7d32;
+      border: 1px solid #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.85vw;
+      color: white;
+      position: relative;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 2px;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    .leer {
+      background-color: #fff; /* <-- Leere Felder weiß */
+    }
+
+    .player {
+      position: absolute;
+      width: 2vw;
+      height: 2vw;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 1vw;
+      color: black;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    }
+
+    /* Farben für Spieler 1 bis 8 */
+    .p1 { background-color: red; color: white; }
+    .p2 { background-color: blue; color: white; }
+    .p3 { background-color: yellow; color: black; }
+    .p4 { background-color: green; color: white; }
+    .p5 { background-color: orange; color: black; }
+    .p6 { background-color: purple; color: white; }
+    .p7 { background-color: cyan; color: black; }
+    .p8 { background-color: pink; color: black; }
+
+    .info {
+      text-align: center;
+      font-size: 1.5em;
+      margin-top: 20px;
+    }
+
+    .center-button {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    button {
+      font-size: 1.1em;
+      padding: 8px 18px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.13);
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .dice-container {
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      margin: 18px 0 0 0;
+    }
+
+    .dice-container img {
+      width: 90px;
+      height: 90px;
+      transition: transform 0.3s ease;
+    }
+
+    #anzeige {
+      font-size: 1.2rem;
+      color: #023047;
+      margin-top: 12px;
+    }
+
+    /* Neu: Stil für das zentrierte Overlay */
+    #center-overlay {
+      position: absolute;
+      top: 60%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: transparent;
+      border-radius: 18px;
+      padding: 10px 10px 10px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 320px;
+      min-height: 120px;
+      z-index: 10;
+    }
+
+    /* Neu: Stil für das Feld-Info-Popup */
+    #feld-popup {
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.98);
+      border: 2px solid #007bff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      padding: 32px 40px;
+      min-width: 320px;
+      max-width: 95vw;
+      z-index: 1000;
+      text-align: center;
+    }
+
+    .besitz-tabelle {
+      margin: 32px auto 0 auto;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      min-width: 320px;
+      font-size: 1em;
+    }
+    .besitz-tabelle th, .besitz-tabelle td {
+      padding: 8px 12px;
+      border: 1px solid #bbb;
+      text-align: left;
+    }
+    .besitz-tabelle th {
+      background: #0077b6;
+      color: #fff;
+    }
+    .besitz-tabelle tr:nth-child(even) {
+      background: #f2f2f2;
+    }
+    .besitz-tabelle tr:hover {
+      background: #e0f7fa;
+    }
+    #turn-modal {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      background: #fff;
+      border: 2px solid #007bff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      padding: 24px 28px;
+      min-width: 220px;
+      z-index: 1000;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .board {
+        grid-template-columns: repeat(11, minmax(16px, 7vw));
+        grid-template-rows: repeat(11, minmax(16px, 7vw));
+      }
+      #center-overlay, #feld-modal, #wurf-popup {
+        min-width: 120px;
+        font-size: 1em;
+        padding: 6px 4px;
+      }
+      .dice-container img {
+        width: 54px;
+        height: 54px;
+      }
+      .feld {
+        font-size: 1.5vw;
+      }
+      .player {
+        width: 3vw;
+        height: 3vw;
+        font-size: 2vw;
+      }
+    }
+
+    #wurf-popup {
+      display: none;
+      position: absolute;
+      left: 50%;
+      top: 0;
+      transform: translate(-50%, -120%);
+      background: #fff;
+      border: 2px solid #007bff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+      padding: 10px 24px;
+      min-width: 180px;
+      z-index: 100;
+      font-size: 1.1rem;
+    }
+
+    .main-flex {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .besitz-links, .besitz-rechts {
+      flex: 0 0 auto;
+      margin: 0 16px;
+    }
+
+    .besitz-tabelle {
+      margin: 0;
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .besitz-tabelle th, .besitz-tabelle td {
+      padding: 8px 12px;
+      border: 1px solid #bbb;
+      text-align: left;
+    }
+
+    .besitz-tabelle th {
+      background: #0077b6;
+      color: #fff;
+    }
+
+    .besitz-tabelle tr:nth-child(even) {
+      background: #f2f2f2;
+    }
+
+    .besitz-tabelle tr:hover {
+      background: #e0f7fa;
+    }
+
+    #feld-modal {
+      display:none;
+      position:fixed;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      background:rgba(255,255,255,0.98);
+      border:2px solid #007bff;
+      border-radius:16px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.18);
+      padding:48px 32px; /* <-- Padding erhöht */
+      min-width:320px;
+      min-height:320px;  /* <-- Höhe erhöht */
+      max-width:95vw;
+      z-index:1000;
+      text-align:center;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Saufmonopoly</h2>
+
+  <div class="main-flex" style="display: flex; flex-direction: row; justify-content: center; align-items: flex-start; width: 100%;">
+    <!-- Linke Besitzübersicht -->
+    <div class="besitz-links" style="flex:0 0 auto; margin-right: 32px;">
+      <h3>Besitzübersicht</h3>
+      <table class="besitz-tabelle">
+        <tr>
+          <th>Feld</th>
+          <th>Besitzer</th>
+        </tr>
+        {% for feld in felder_infos[:20] %}
+        <tr>
+          <td>{{ feld.name }}</td>
+          <td style="text-align:center;">
+            {{ feld.besitzer or "" }}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    <!-- Spielfeld -->
+    <div style="flex:1 1 auto; display: flex; flex-direction: column; align-items: center;">
+      <div class="board-container" style="position: relative;">
+        <div class="board">
+          {# Mapping für deutsche Farbnamen zu CSS #}
+          {% set farbmap = {
+            'gelb': 'yellow',
+            'rot': 'red',
+            'blau': 'blue',
+            'orange': 'orange',
+            'schwarz': 'black',
+            'lila': 'purple',
+            'gold': 'gold',
+            'gruen': 'green',
+            'grün': 'green',
+            'pink': 'pink',
+            'cyan': 'cyan',
+            'weiss': 'white',
+            'weiß': 'white',
+            'braun': '#964B00',
+            'hellblau': '#ADD8E6',
+            'dunkelgrau': '#A9A9A9',
+            'rainbow': 'linear-gradient(45deg, yellow, orange, red)'
+          } %}
+          {# Die 40 Koordinaten für die äußeren Felder #}
+          {% set koords = [
+            (0,0),(1,0),(2,0),(3,0),(4,0),(5,0),(6,0),(7,0),(8,0),(9,0),(10,0),
+            (10,1),(10,2),(10,3),(10,4),(10,5),(10,6),(10,7),(10,8),(10,9),(10,10),
+            (9,10),(8,10),(7,10),(6,10),(5,10),(4,10),(3,10),(2,10),(1,10),(0,10),
+            (0,9),(0,8),(0,7),(0,6),(0,5),(0,4),(0,3),(0,2),(0,1)
+          ] %}
+          {% set feld_koord_map = {} %}
+          {% for idx in range(40) %}
+            {% set _ = feld_koord_map.update({koords[idx]: idx}) %}
+          {% endfor %}
+          {% for y in range(11) %}
+            {% for x in range(11) %}
+              {% if (x, y) in feld_koord_map %}
+                {% set feld_idx = feld_koord_map[(x, y)] %}
+                {% set feldinfo = felder_infos[feld_idx] %}
+                {% set css_farbe = farbmap.get(feldinfo.farbe|lower, feldinfo.farbe|lower if feldinfo.farbe else 'green') %}
+                <div class="feld"
+                  style="background: {{ css_farbe }};
+                         border: 2px solid black; cursor:pointer;"
+                  data-feld-index="{{ feld_idx }}"
+                  onclick="zeigeFeldInfo({{ feld_idx }})">
+                  {{ feldinfo.name }}
+                  {% for i in range(spieler|length) %}
+                    {% if feld_idx == positionen[i] %}
+                      <div class="player p{{ i + 1 }}">{{ i + 1 }}</div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="leer"></div>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </div>
+        <div id="center-overlay" style="position: absolute; top: 70%; left: 50%; transform: translate(-50%, -50%); background: transparent; border-radius: 18px; padding: 32px 36px 24px 36px; display: flex; flex-direction: column; align-items: center; min-width: 480px; min-height: 260px; z-index: 10;">
+          {% if zeige_wer_ist_dran %}
+            <div id="turn-modal" style="display:block;">
+              <h2>{{ spieler[aktiver] }} ist am Zug</h2>
+              <form method="post">
+                <button id="wuerfelnBtn" type="submit">🎲 Würfeln</button>
+              </form>
+            </div>
+          {% elif not zeige_feldinfo %}
+          <div style="position:relative; width:fit-content; margin:0 auto;">
+            <form id="wuerfelform" method="post" onsubmit="return wuerfeln();">
+              <button id="wuerfelnBtn" type="submit">🎲 Würfeln</button>
+            </form>
+            <div id="wurf-popup">
+              <span id="wurf-popup-text"></span>
+              <button id="wurf-popup-ok" style="margin-left:18px; display:none;">OK</button>
+            </div>
+          </div>
+          <div class="dice-container" style="margin: 24px 0 0 0;">
+            <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}">
+            <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}">
+          </div>
+          {% endif %}
+        </div>
+        <!-- Modal für Felldetails -->
+        <div id="feld-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(255,255,255,0.98); border:2px solid #007bff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,0.18); padding:48px 32px; min-width:320px; min-height:320px; max-width:95vw; z-index:1000; text-align:center;">
+          <div id="feld-modal-content"></div>
+          <button style="margin-top:18px;" onclick="document.getElementById('feld-modal').style.display='none'">Schließen</button>
+        </div>
+        {% if zeige_feldinfo and feldinfo %}
+        <script>
+          window.addEventListener("DOMContentLoaded", function() {
+            let feld = {{ feldinfo|tojson }};
+            let aktiver = {{ popup_spieler }};
+            let spielername = "{{ spieler[popup_spieler] }}";
+            let feld_idx = {{ pending_popup["feld"] if pending_popup else 0 }};
+            let html = `<h3>${feld.name}</h3>`;
+            html += `<p>Typ: <b>${feld.typ}</b></p>`;
+            if (feld.kaufpreis) html += `<p>Kaufpreis: <b>${feld.kaufpreis}</b></p>`;
+            if (feld.miete) html += `<p>Miete: <b>${feld.miete}</b></p>`;
+            html += `<p>Alkohol: <b>${feld.alkohol_typ}</b> (${feld.alkohol_menge})</p>`;
+            if (feld.zusatz_regel) html += `<p>Regel: <b>${feld.zusatz_regel}</b></p>`;
+            if (!feld.besitzer) {
+              html += `<p>Dieses Feld ist frei.</p>`;
+              html += `<button id="kaufen-btn" data-feld="${feld_idx}">Feld kaufen</button>`;
+              html += `<button id="skip-btn" data-feld="${feld_idx}">Nicht kaufen</button>`;
+            } else if (feld.besitzer !== spielername) {
+              html += `<p>Besitzer: <b>${feld.besitzer}</b></p>`;
+              html += `<button id="miete-btn" data-feld="${feld_idx}">Miete zahlen</button>`;
+            } else {
+              html += `<p>Du besitzt dieses Feld.</p>`;
+              html += `<button id="skip-btn" data-feld="${feld_idx}">OK</button>`;
+            }
+            document.getElementById('feld-modal-content').innerHTML = html;
+            document.getElementById('feld-modal').style.display = 'block';
+
+            setTimeout(() => {
+              const kaufenBtn = document.getElementById('kaufen-btn');
+              if (kaufenBtn) {
+                kaufenBtn.onclick = function() {
+                  fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'kaufen', feld: kaufenBtn.getAttribute('data-feld')})
+                  }).then(res => res.json()).then(() => {
+                    document.getElementById('feld-modal').innerHTML = "<h3>Kaufpreis bezahlt!</h3>";
+                    setTimeout(() => location.reload(), 900);
+                  });
+                };
+              }
+              const mieteBtn = document.getElementById('miete-btn');
+              if (mieteBtn) {
+                mieteBtn.onclick = function() {
+                  fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'miete', feld: mieteBtn.getAttribute('data-feld')})
+                  }).then(res => res.json()).then(() => {
+                    document.getElementById('feld-modal').innerHTML = "<h3>Miete bezahlt!</h3>";
+                    setTimeout(() => location.reload(), 900);
+                  });
+                };
+              }
+              const skipBtn = document.getElementById('skip-btn');
+              if (skipBtn) {
+                skipBtn.onclick = function() {
+                  fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'skip', feld: skipBtn.getAttribute('data-feld')})
+                  }).then(() => location.reload());
+                };
+              }
+            }, 100);
+          });
+        </script>
+        {% endif %}
+      </div>
+    </div>
+    <!-- Rechte Besitzübersicht -->
+    <div class="besitz-rechts" style="flex:0 0 auto; margin-left: 32px;">
+      <h3>Besitzübersicht</h3>
+      <table class="besitz-tabelle">
+        <tr>
+          <th>Feld</th>
+          <th>Besitzer</th>
+        </tr>
+        {% for feld in felder_infos[20:] %}
+        <tr>
+          <td>{{ feld.name }}</td>
+          <td style="text-align:center;">
+            {{ feld.besitzer or "" }}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <!-- Neu: Modals für Zug und Wurf -->
+  <div id="turn-modal" style="display:none; position:fixed; top:30%; left:50%; transform:translate(-50%,-50%); background:#fff; border:2px solid #007bff; border-radius:16px; box-shadow:0 4px 24px rgba(0,0,0,0.18); padding:32px 40px; min-width:320px; z-index:1000; text-align:center;">
+    <h2 id="turn-modal-text"></h2>
+    <form id="turn-form" method="post">
+      <button id="turn-btn" type="submit">Würfeln</button>
+    </form>
+  </div>
+
+  <script>
+    window.addEventListener("DOMContentLoaded", function() {
+      // 1. Wer ist dran?
+      {% if zeige_wer_ist_dran %}
+        document.getElementById('turn-modal').style.display = 'block';
+        document.getElementById('turn-modal-text').textContent = "{{ spieler[aktiver] }} ist am Zug";
+        document.getElementById('turn-btn').textContent = "Würfeln";
+        document.getElementById('turn-form').onsubmit = function() {
+          document.getElementById('turn-btn').disabled = true;
+          return true;
+        };
+      {% elif zeige_wurf_popup %}
+        // 2. Würfelanimation und Wurf-Popup
+        document.getElementById('wurf-modal').style.display = 'block';
+        document.getElementById('wurf-modal-text').textContent = "{{ spieler[aktiver] }} würfelt...";
+        let w1 = document.getElementById('anim-w1');
+        let w2 = document.getElementById('anim-w2');
+        let count = 0, max = 13;
+        let anim = setInterval(() => {
+          let r1 = Math.floor(Math.random()*6)+1;
+          let r2 = Math.floor(Math.random()*6)+1;
+          w1.src = `/static/dice/${r1}.png`;
+          w2.src = `/static/dice/${r2}.png`;
+          count++;
+          if (count >= max) {
+            clearInterval(anim);
+            w1.src = `/static/dice/${window.wurf[0]}.png`;
+            w2.src = `/static/dice/${window.wurf[1]}.png`;
+            document.getElementById('wurf-modal-text').textContent = `${window.aktiverSpieler} hat ${window.wurf[0] + window.wurf[1]} gewürfelt!`;
+            document.getElementById('wurf-bestätigen-btn').style.display = '';
+            document.getElementById('wurf-bestätigen-btn').onclick = function() {
+              fetch(window.location.pathname, {method:"POST"}).then(() => location.reload());
+            };
+          }
+        }, 80);
+      {% endif %}
+    });
+  </script>
+  <script>
+    window.aktiverSpieler = "{{ spieler[aktiver] }}";
+    window.aktiverIndex = {{ aktiver }};
+    window.positionen = {{ positionen|tojson }};
+    window.felder = {{ felder|tojson }};
+    window.felder_infos = {{ felder_infos|tojson }};
+    window.spieler = {{ spieler|tojson }};
+    {% if wurf %}
+      window.wurf = {{ wurf|tojson }};
+    {% else %}
+      window.wurf = null;
+    {% endif %}
+  </script>
+  <script>
+    // Interaktive Feldinfo für jedes Feld
+    function zeigeFeldInfo(idx) {
+      const feld = window.felder_infos[idx];
+      let html = `<h3>${feld.name}</h3>`;
+      html += `<p>Typ: <b>${feld.typ}</b></p>`;
+      if (feld.kaufpreis) html += `<p>Kaufpreis: <b>${feld.kaufpreis}</b></p>`;
+      if (feld.miete) html += `<p>Miete: <b>${feld.miete}</b></p>`;
+      html += `<p>Alkohol: <b>${feld.alkohol_typ}</b> (${feld.alkohol_menge})</p>`;
+      if (feld.zusatz_regel) html += `<p>Regel: <b>${feld.zusatz_regel}</b></p>`;
+      if (feld.besitzer) html += `<p>Besitzer: <b>${feld.besitzer}</b></p>`;
+      document.getElementById('feld-modal-content').innerHTML = html;
+      document.getElementById('feld-modal').style.display = 'block';
+    }
+  </script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

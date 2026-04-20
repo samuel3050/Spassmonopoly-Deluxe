@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Spielernamen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h1>Spielernamen eingeben</h1>
+  <form method="post">
+    {% for i in range(1, anzahl + 1) %}
+      <input type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required><br>
+    {% endfor %}
+    <button type="submit">Spiel starten</button>
+  </form>
+</body>
+</html>

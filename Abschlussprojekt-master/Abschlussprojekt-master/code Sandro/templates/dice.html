@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Würfeln</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h1 id="spielername">
+    {% if spieler and aktiver is not none %}
+      {{ spieler[aktiver] }} ist am Zug
+    {% else %}
+      Spieler ist am Zug
+    {% endif %}
+  </h1>
+  <div class="dice-container">
+    <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}">
+    <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}">
+  </div>
+  <button onclick="wuerfeln()">Würfeln</button>
+  <p id="anzeige"></p>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

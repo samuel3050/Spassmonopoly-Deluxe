@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Spieleranzahl wählen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <h1>Wie viele Spieler?</h1>
+  <form method="post">
+    <input type="number" name="anzahl" min="2" max="8" required>
+    <button type="submit">Weiter</button>
+  </form>
+</body>
+</html>
