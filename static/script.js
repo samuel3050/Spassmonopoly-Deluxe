@@ -1,30 +1,61 @@
 function wuerfeln() {
-  document.getElementById("anzeige").innerText = "Würfeln...";
-  let w1 = document.getElementById("w1");
-  let w2 = document.getElementById("w2");
-
-  // Animation durch zufällige Zahlen
-  let interval = setInterval(() => {
-    let z1 = Math.floor(Math.random() * 6) + 1;
-    let z2 = Math.floor(Math.random() * 6) + 1;
-    w1.src = `/static/dice/${z1}.png`;
-    w2.src = `/static/dice/${z2}.png`;
-  }, 100);
-
-  // Nach 1 Sekunde stoppen und echtes Ergebnis holen
-  setTimeout(() => {
-    clearInterval(interval);
-    fetch("/roll")
-      .then(res => res.json())
-      .then(data => {
-        w1.src = `/static/dice/${data.w1}.png`;
-        w2.src = `/static/dice/${data.w2}.png`;
-        let text = `Gewürfelt: ${data.w1} + ${data.w2} = ${data.summe}`;
-        if (data.doppel) {
-          text += " (Doppel! Nochmal würfeln)";
-        }
-        document.getElementById("anzeige").innerText = text;
-        document.getElementById("spielername").innerText = `${data.spieler} ist am Zug`;
-      });
-  }, 1000);
+    const btn = document.getElementById('wuerfelnBtn');
+    if (btn) btn.disabled = true;
+    const form = document.getElementById('wuerfelform');
+    if (form) form.submit();
+    return false;
 }
+
+// Feld kaufen Popup: "Kaufpreis bezahlt" mit Button
+window.addEventListener("DOMContentLoaded", function() {
+    setTimeout(() => {
+        // Beispiel für das Kaufen-Button-Handling:
+        const kaufenBtn = document.getElementById('kaufen-btn');
+        if (kaufenBtn) {
+            kaufenBtn.onclick = function() {
+                const feldId = kaufenBtn.getAttribute('data-feld');
+                fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'kaufen', feld: feldId})
+                }).then(res => res.json()).then(() => {
+                    document.getElementById('feld-modal').innerHTML = `
+                        <h3>Kaufpreis bezahlt!</h3>
+                        <button id="bezahlt-btn" style="margin-top:18px;">Bezahlt</button>
+                    `;
+                    document.getElementById('feld-modal').style.display = 'block';
+                    document.getElementById('bezahlt-btn').onclick = function() {
+                        document.getElementById('feld-modal').style.display = 'none';
+                        setTimeout(() => location.reload(), 200);
+                    };
+                });
+            };
+        }
+        const mieteBtn = document.getElementById('miete-btn');
+        if (mieteBtn) {
+            mieteBtn.onclick = function() {
+                fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'miete', feld: mieteBtn.getAttribute('data-feld')})
+                }).then(res => res.json()).then(() => {
+                    document.getElementById('feld-modal').style.display = 'none';
+                    setTimeout(() => location.reload(), 400);
+                });
+            };
+        }
+        const skipBtn = document.getElementById('skip-btn');
+        if (skipBtn) {
+            skipBtn.onclick = function() {
+                fetch('/feld_aktion', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({aktion: 'skip', feld: skipBtn.getAttribute('data-feld')})
+                }).then(() => {
+                    document.getElementById('feld-modal').style.display = 'none';
+                    setTimeout(() => location.reload(), 400);
+                });
+            };
+        }
+    }, 100);
+});
