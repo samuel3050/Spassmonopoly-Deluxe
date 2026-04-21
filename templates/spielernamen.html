@@ -1,16 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-  <title>Spielernamen</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spieler anlegen</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
-  <h1>Spielernamen eingeben</h1>
-  <form method="post">
-    {% for i in range(1, anzahl + 1) %}
-      <input type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required><br>
-    {% endfor %}
-    <button type="submit">Spiel starten</button>
-  </form>
+<body class="page page-setup">
+  <main class="setup-shell">
+    <section class="setup-card">
+      <div class="hero-badge">Lobby</div>
+      <h1>Spieler eingeben</h1>
+      <p class="hero-copy">
+        Gib fuer alle {{ anzahl }} Spieler einen Namen ein. Leere Felder werden automatisch
+        mit Standardnamen aufgefuellt.
+      </p>
+
+      <form method="post" class="players-form">
+        {% for i in range(1, anzahl + 1) %}
+        <label class="field-label" for="spieler{{ i }}">Spieler {{ i }}</label>
+        <input id="spieler{{ i }}" type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required>
+        {% endfor %}
+
+        <div class="form-actions">
+          <a href="{{ url_for('index') }}" class="secondary-link">Zurueck</a>
+          <button type="submit" class="primary-btn">Spiel starten</button>
+        </div>
+      </form>
+    </section>
+  </main>
 </body>
 </html>
