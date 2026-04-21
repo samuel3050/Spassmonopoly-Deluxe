@@ -1,18 +1,18 @@
-# Saufmonopoly – Regeln
+# Spaßmonopoly Deluxe – Regeln
 
 ## Ziel
-Wer am Ende die wenigsten Schlücke getrunken hat, gewinnt!
+Sichert möglichst viele Felder, nutzt Spezialfelder clever und führt eure Runde mit guter Stimmung zum Sieg.
 
 ## Spielablauf
-1. Jeder Spieler gibt seinen Namen ein.
-2. Spieler 1 beginnt. Es wird reihum gewürfelt.
-3. Nach dem Würfeln fährt das Männchen auf das neue Feld.
-4. Landet man auf einem freien Feld, kann man es „kaufen“ (Schlucke trinken).
-5. Landet man auf einem fremden Feld, zahlt man Miete (Schlucke trinken).
-6. Spezialfelder haben eigene Regeln (siehe Spielfeld).
-7. Wer zu betrunken ist, kann freiwillig aussteigen.
+1. Alle Spielerinnen und Spieler tragen ihre Namen ein.
+2. Die Runde beginnt bei Spieler 1 und läuft anschließend reihum weiter.
+3. Jeder Zug besteht aus drei klaren Schritten: würfeln, ziehen, Feld auswerten.
+4. Freie Straßen, Bahnhöfe und Werke können gesichert werden.
+5. Auf fremden Besitzfeldern wird die angezeigte Abgabe bestätigt.
+6. Spezialfelder bringen Abwechslung, Tempo oder kleine Gruppenaktionen in die Runde.
+7. Die Übersichten für Besitz, Verlauf und Zugstatus helfen jederzeit bei der Orientierung.
 
 ## Hinweise
-- Die Besitzübersicht zeigt, wem welche Felder gehören.
-- Nach jedem Server-Neustart ist alles zurückgesetzt.
-- Viel Spaß und trinkt verantwortungsvoll!
+- Das Spiel ist für gemeinsame, lockere Runden im Browser gedacht.
+- Nach jedem Neustart werden Besitzstände zurückgesetzt.
+- Gute Stimmung, Fairplay und ein flüssiger Ablauf stehen im Mittelpunkt.

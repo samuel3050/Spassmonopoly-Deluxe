@@ -9,7 +9,7 @@ try:
     from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 except ImportError as exc:
     raise SystemExit(
-        "Flask ist nicht installiert. Bitte fuehre `pip install -r requirements.txt` im Ordner "
+        "Flask ist nicht installiert. Bitte führe `pip install -r requirements.txt` im Ordner "
         "`Spassmonopoly-Deluxe` aus."
     ) from exc
 
@@ -23,33 +23,43 @@ else:
 from board_data import DEFAULT_FIELDS
 
 
+APP_NAME = "Spaßmonopoly Deluxe"
+
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
+app.json.ensure_ascii = False
 
 DB_CONFIG = {
     "host": os.getenv("DB_HOST", "localhost"),
     "user": os.getenv("DB_USER", "root"),
     "password": os.getenv("DB_PASSWORD", ""),
-    "database": os.getenv("DB_NAME", "saufmonopoly"),
+    "database": os.getenv("DB_NAME", "spassmonopoly"),
 }
 
 COLOR_MAP = {
-    "gelb": "#f2c94c",
-    "rot": "#d96459",
-    "blau": "#4a7cf3",
-    "orange": "#f28c28",
-    "schwarz": "#2f3640",
-    "lila": "#7d53de",
-    "gold": "#b8860b",
-    "grun": "#1f9d74",
-    "gruen": "#1f9d74",
-    "pink": "#d96cb3",
-    "cyan": "#31c6d4",
-    "weiss": "#f5f7fa",
-    "braun": "#8d5a3b",
-    "hellblau": "#76b7ff",
-    "dunkelgrau": "#495057",
-    "rainbow": "linear-gradient(135deg, #f2c94c, #f28c28, #d96459)",
+    "gelb": "#f7d659",
+    "rot": "#ef6b63",
+    "blau": "#68a6ff",
+    "orange": "#ffb255",
+    "schwarz": "#444b54",
+    "lila": "#a98bff",
+    "gold": "#d7a53d",
+    "grun": "#7ed88f",
+    "gruen": "#7ed88f",
+    "pink": "#ff8bc2",
+    "cyan": "#7dd9e8",
+    "weiss": "#ffffff",
+    "braun": "#c99b73",
+    "hellblau": "#8ed0ff",
+    "dunkelgrau": "#6d7783",
+    "rainbow": "linear-gradient(135deg, #ffd25f, #ff9c6b, #ff7fb4)",
+}
+
+SPECIAL_FIELD_RULES = {
+    10: {"delta_self": -2, "message": "Ideenjoker: 2 Aktionspunkte zurück."},
+    20: {"delta_self": -1, "message": "Ruheoase: 1 Aktionspunkt zurück."},
+    30: {"delta_all": -1, "message": "Fairplay-Zentrale: Alle erhalten 1 Aktionspunkt zurück."},
+    40: {"delta_all": 1, "message": "Finale der Freude: Alle erhalten 1 zusätzlichen Aktionspunkt."},
 }
 
 
@@ -72,6 +82,72 @@ def copy_fields(fields):
     return [dict(field) for field in fields]
 
 
+def clamp_points(points, index, delta):
+    points[index] = max(0, points[index] + delta)
+
+
+def get_field_type(field):
+    return normalize_text(field.get("typ"))
+
+
+def get_popup_hint(field):
+    if not field:
+        return None
+
+    field_type = get_field_type(field)
+    if field["ist_kaufbar"] and not field.get("besitzer"):
+        return f"Dieses Feld ist frei. Du kannst es jetzt für {field.get('kaufpreis') or '0'} sichern oder weiterziehen."
+    if field.get("besitzer"):
+        return f"Dieses Feld gehört {field['besitzer']}. Die angezeigte Abgabe wird jetzt bestätigt."
+    if field_type == "gemeinschaft":
+        return "Dieses Gemeinschaftsfeld wirkt sofort auf die ganze Runde."
+    if field_type == "steuer":
+        return f"Dieses Feld löst eine feste Abgabe von {field.get('miete') or '0'} aus."
+    if field_type == "gefangnis":
+        return "Dieses Feld verhängt eine kurze Spielstrafe in Form zusätzlicher Aktionspunkte."
+    if field_type == "los":
+        return "Auf Los bekommst du einen kleinen Bonus zurück."
+    if field_type == "spezial":
+        return field.get("zusatz_regel") or "Dieses Spezialfeld hat einen eigenen Effekt."
+    return field.get("zusatz_regel")
+
+
+def apply_non_property_effect(field, active_index, players, points):
+    field_type = get_field_type(field)
+    player_name = players[active_index]
+
+    if field_type == "los":
+        clamp_points(points, active_index, -1)
+        return f"{player_name} landet auf Los und erhält 1 Aktionspunkt zurück."
+
+    if field_type == "gemeinschaft":
+        for index in range(len(players)):
+            clamp_points(points, index, -1)
+        return f"{player_name} aktiviert {field['name']}: Alle erhalten 1 Aktionspunkt zurück."
+
+    if field_type == "steuer":
+        amount = parse_number(field.get("miete"))
+        clamp_points(points, active_index, amount)
+        return f"{player_name} zahlt auf {field['name']} {field.get('miete') or '0'}."
+
+    if field_type == "gefangnis":
+        clamp_points(points, active_index, 2)
+        return f"{player_name} macht auf {field['name']} einen Pflichtstopp und erhält 2 Aktionspunkte."
+
+    if field_type == "spezial":
+        rule = SPECIAL_FIELD_RULES.get(int(field["feld_id"]))
+        if rule is None:
+            return f"{player_name} löst auf {field['name']} einen Spezialeffekt aus."
+        if "delta_self" in rule:
+            clamp_points(points, active_index, rule["delta_self"])
+        if "delta_all" in rule:
+            for index in range(len(players)):
+                clamp_points(points, index, rule["delta_all"])
+        return f"{player_name} aktiviert {field['name']}. {rule['message']}"
+
+    return f"{player_name} beendet den Zug auf {field['name']}."
+
+
 class BoardStore:
     def __init__(self):
         self._memory_fields = copy_fields(DEFAULT_FIELDS)
@@ -89,8 +165,8 @@ class BoardStore:
                     "kaufpreis": field.get("kaufpreis"),
                     "miete": field.get("miete"),
                     "farbe": field.get("farbe", "Dunkelgrau"),
-                    "farbe_css": COLOR_MAP.get(normalize_text(field.get("farbe")), "#4f7d5c"),
-                    "alkohol_typ": field.get("alkohol_typ", "Wasser"),
+                    "farbe_css": COLOR_MAP.get(normalize_text(field.get("farbe")), "#9fb7a3"),
+                    "alkohol_typ": field.get("alkohol_typ", "Bonus"),
                     "alkohol_menge": field.get("alkohol_menge", "0"),
                     "zusatz_regel": field.get("zusatz_regel"),
                     "besitzer": field.get("besitzer"),
@@ -132,7 +208,7 @@ class BoardStore:
     @contextmanager
     def _db_cursor(self, dictionary=False):
         if not self._check_db():
-            raise RuntimeError("Database not available")
+            raise RuntimeError("Datenbank nicht verfügbar")
 
         connection = mysql.connect(**DB_CONFIG)
         cursor = connection.cursor(dictionary=dictionary)
@@ -218,7 +294,7 @@ def get_scoreboard(fields):
 
     names = session.get("spieler", [])
     positions = session.get("positionen", [])
-    drinks = session.get("konto", [])
+    points = session.get("konto", [])
     steps = session.get("gesamt", [])
     active_index = session.get("aktiver", 0)
 
@@ -230,7 +306,7 @@ def get_scoreboard(fields):
             {
                 "name": name,
                 "position": current_field["name"],
-                "drinks": drinks[index],
+                "drinks": points[index],
                 "steps": steps[index],
                 "properties": owner_counts.get(name, 0),
                 "is_active": index == active_index,
@@ -250,7 +326,7 @@ def get_active_player_name():
 def push_event(message):
     history = list(session.get("verlauf", []))
     history.insert(0, message)
-    session["verlauf"] = history[:8]
+    session["verlauf"] = history[:10]
     session["last_event"] = message
 
 
@@ -269,6 +345,24 @@ def get_ownership_summary(ownership):
     return summary
 
 
+def get_game_highlights(fields, ownership):
+    owner_counts = {owner: len(owner_fields) for owner, owner_fields in ownership.items()}
+    leader_name = None
+    leader_count = 0
+
+    if owner_counts:
+        leader_name, leader_count = sorted(owner_counts.items(), key=lambda item: (-item[1], item[0].lower()))[0]
+
+    free_fields = sum(1 for field in fields if field["ist_kaufbar"] and not field.get("besitzer"))
+    return {
+        "runde": session.get("runde", 1),
+        "zugnummer": session.get("zugnummer", 1),
+        "leaderName": leader_name,
+        "leaderCount": leader_count,
+        "freieFelder": free_fields,
+    }
+
+
 def build_game_payload(fields=None, ownership=None):
     if fields is None or ownership is None:
         fields, ownership = get_board_state()
@@ -280,11 +374,13 @@ def build_game_payload(fields=None, ownership=None):
     popup_field = None
     popup_player = None
     popup_roll = None
+    popup_hint = None
 
     if pending_popup:
         popup_field = fields[pending_popup["field_index"]]
         popup_player = pending_popup["spieler"]
         popup_roll = pending_popup["wurf"]
+        popup_hint = get_popup_hint(popup_field)
 
     phase = "roll"
     if pending_popup:
@@ -293,6 +389,7 @@ def build_game_payload(fields=None, ownership=None):
         phase = "move"
 
     return {
+        "appName": APP_NAME,
         "spieler": players,
         "aktiver": active_index,
         "activePlayerName": get_active_player_name(),
@@ -305,14 +402,26 @@ def build_game_payload(fields=None, ownership=None):
         "popupWurf": popup_roll,
         "popupFeld": popup_field,
         "popupSpieler": popup_player,
+        "popupHint": popup_hint,
         "scoreboard": get_scoreboard(fields),
         "ownership": get_ownership_summary(ownership),
+        "highlights": get_game_highlights(fields, ownership),
         "phase": phase,
-        "zeigeWurfPopup": phase == "move",
-        "zeigeFeldinfo": bool(pending_popup),
         "lastEvent": session.get("last_event"),
         "eventLog": session.get("verlauf", []),
     }
+
+
+def advance_turn_from(active_index):
+    next_active = (active_index + 1) % len(session["spieler"])
+    session["aktiver"] = next_active
+    session["zugnummer"] = session.get("zugnummer", 1) + 1
+
+    if next_active == 0:
+        session["runde"] = session.get("runde", 1) + 1
+        push_event(f"Runde {session['runde']} beginnt. {get_active_player_name()} ist am Zug.")
+    else:
+        push_event(f"{get_active_player_name()} ist als Nächstes am Zug.")
 
 
 def render_board():
@@ -348,12 +457,14 @@ def namen():
         session["aktiver"] = 0
         session["konto"] = [0 for _ in players]
         session["gesamt"] = [0 for _ in players]
+        session["runde"] = 1
+        session["zugnummer"] = 1
         session["pending_popup"] = None
         session["warte_auf_wurf"] = True
         session["wurf"] = None
         session["letzter_wurf"] = None
         session["verlauf"] = []
-        push_event(f"{players[0]} beginnt die Runde.")
+        push_event(f"{players[0]} eröffnet Runde 1.")
         return redirect(url_for("spiel"))
 
     return render_template("spielernamen.html", anzahl=session["anzahl"])
@@ -372,7 +483,7 @@ def spiel():
 def zug_wuerfeln():
     missing_game = redirect_if_game_missing()
     if missing_game:
-        return jsonify({"ok": False, "msg": "Spiel wurde nicht gestartet."}), 400
+        return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
 
     waiting_for_roll = session.get("warte_auf_wurf", True)
     if not waiting_for_roll or session.get("pending_popup"):
@@ -385,7 +496,7 @@ def zug_wuerfeln():
     session["wurf"] = roll
     session["letzter_wurf"] = roll
     session["warte_auf_wurf"] = False
-    push_event(f"{get_active_player_name()} hat {dice_1 + dice_2} gewuerfelt.")
+    push_event(f"{get_active_player_name()} hat {dice_1 + dice_2} gewürfelt.")
     session.modified = True
     return jsonify({"ok": True, "state": build_game_payload()})
 
@@ -394,7 +505,7 @@ def zug_wuerfeln():
 def zug_ziehen():
     missing_game = redirect_if_game_missing()
     if missing_game:
-        return jsonify({"ok": False, "msg": "Spiel wurde nicht gestartet."}), 400
+        return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
 
     fields, _ = get_board_state()
     active_index = session.get("aktiver", 0)
@@ -403,10 +514,10 @@ def zug_ziehen():
     roll = session.get("wurf")
 
     if waiting_for_roll or pending_popup:
-        return jsonify({"ok": False, "msg": "Es gibt gerade keinen bestaetigten Wurf zum Ziehen."}), 400
+        return jsonify({"ok": False, "msg": "Es gibt gerade keinen bestätigten Wurf zum Ziehen."}), 400
     if not roll:
         session["warte_auf_wurf"] = True
-        return jsonify({"ok": False, "msg": "Der Wurf ist nicht mehr verfuegbar."}), 400
+        return jsonify({"ok": False, "msg": "Der Wurf ist nicht mehr verfügbar."}), 400
 
     movement = roll[0] + roll[1]
     positions = list(session.get("positionen", []))
@@ -433,7 +544,7 @@ def zug_ziehen():
 def feld_aktion():
     missing_game = redirect_if_game_missing()
     if missing_game:
-        return jsonify({"ok": False, "msg": "Spiel wurde nicht gestartet."}), 400
+        return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
 
     payload = request.get_json(silent=True) or {}
     action = payload.get("aktion")
@@ -452,39 +563,41 @@ def feld_aktion():
 
     active_index = pending_popup["spieler"]
     player_name = session["spieler"][active_index]
-    drinks = list(session.get("konto", []))
+    players = list(session["spieler"])
+    points = list(session.get("konto", []))
 
     if action == "kaufen":
         if not field["ist_kaufbar"]:
-            return jsonify({"ok": False, "msg": "Dieses Feld kann nicht gekauft werden."}), 400
+            return jsonify({"ok": False, "msg": "Dieses Feld kann nicht gesichert werden."}), 400
         if field.get("besitzer"):
-            return jsonify({"ok": False, "msg": "Dieses Feld gehoert bereits jemandem."}), 400
+            return jsonify({"ok": False, "msg": "Dieses Feld gehört bereits jemandem."}), 400
 
         board_store.set_owner(field["feld_id"], player_name)
-        drinks[active_index] += parse_number(field.get("kaufpreis"))
-        session["konto"] = drinks
-        push_event(f"{player_name} kauft {field['name']} fuer {field.get('kaufpreis') or '0'}.")
+        clamp_points(points, active_index, parse_number(field.get("kaufpreis")))
+        session["konto"] = points
+        push_event(f"{player_name} sichert sich {field['name']} für {field.get('kaufpreis') or '0'}.")
 
     elif action == "miete":
-        if field.get("besitzer") and field["besitzer"] != player_name:
-            drinks[active_index] += parse_number(field.get("miete"))
-            session["konto"] = drinks
-            push_event(
-                f"{player_name} zahlt auf {field['name']} {field.get('miete') or '0'} an {field['besitzer']}."
-            )
+        if not field.get("besitzer") or field["besitzer"] == player_name:
+            return jsonify({"ok": False, "msg": "Auf diesem Feld ist keine Abgabe fällig."}), 400
 
-    elif action != "skip":
-        return jsonify({"ok": False, "msg": "Unbekannte Aktion."}), 400
-    elif field.get("besitzer") == player_name:
-        push_event(f"{player_name} landet auf dem eigenen Feld {field['name']}.")
+        clamp_points(points, active_index, parse_number(field.get("miete")))
+        session["konto"] = points
+        push_event(
+            f"{player_name} bestätigt auf {field['name']} die Abgabe von {field.get('miete') or '0'} an {field['besitzer']}."
+        )
+
+    elif action == "skip":
+        effect_message = apply_non_property_effect(field, active_index, players, points)
+        session["konto"] = points
+        push_event(effect_message)
+
     else:
-        push_event(f"{player_name} beendet den Zug auf {field['name']}.")
+        return jsonify({"ok": False, "msg": "Unbekannte Aktion."}), 400
 
     session["pending_popup"] = None
     session["warte_auf_wurf"] = True
-    session["aktiver"] = (active_index + 1) % len(session["spieler"])
-    session.modified = True
-    push_event(f"{get_active_player_name()} ist als Naechstes am Zug.")
+    advance_turn_from(active_index)
     session.modified = True
     return jsonify({"ok": True, "state": build_game_payload()})
 

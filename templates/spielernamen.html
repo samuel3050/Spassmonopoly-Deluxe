@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spieler anlegen</title>
+  <title>Spielrunde vorbereiten</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-setup">
   <main class="setup-shell">
     <section class="setup-card">
       <div class="hero-badge">Lobby</div>
-      <h1>Spieler eingeben</h1>
+      <h1>Spielrunde vorbereiten</h1>
       <p class="hero-copy">
-        Gib fuer alle {{ anzahl }} Spieler einen Namen ein. Leere Felder werden automatisch
-        mit Standardnamen aufgefuellt.
+        Vergib für alle {{ anzahl }} Plätze einen Namen. Leere Felder werden automatisch mit
+        passenden Standardnamen ergänzt, damit ihr ohne Unterbrechung starten könnt.
       </p>
 
       <form method="post" class="players-form">
@@ -23,8 +23,8 @@
         {% endfor %}
 
         <div class="form-actions">
-          <a href="{{ url_for('index') }}" class="secondary-link">Zurueck</a>
-          <button type="submit" class="primary-btn">Spiel starten</button>
+          <a href="{{ url_for('index') }}" class="secondary-link">Zurück</a>
+          <button type="submit" class="primary-btn">Spiel öffnen</button>
         </div>
       </form>
     </section>

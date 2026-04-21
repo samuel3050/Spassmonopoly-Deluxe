@@ -6,8 +6,11 @@ const BOARD_COORDS = [
 ];
 
 const refs = {};
+const DRAWER_KEYS = ["players", "ownership", "log", "help"];
+
 let state = window.gameData;
 let selectedFieldId = null;
+let activeDrawer = null;
 let busy = false;
 let toastTimer = null;
 let animationTimer = null;
@@ -25,30 +28,67 @@ function getField(fieldId) {
   return state.felder.find((field) => Number(field.feld_id) === Number(fieldId));
 }
 
+function getFocusField() {
+  if (selectedFieldId) {
+    return getField(selectedFieldId);
+  }
+  if (state.popupFeld) {
+    return state.popupFeld;
+  }
+  if (!state.positionen?.length) {
+    return null;
+  }
+  return state.felder[state.positionen[state.aktiver]];
+}
+
 function isPendingField(fieldId) {
   return state.phase === "field_action"
     && state.popupFeld
     && Number(state.popupFeld.feld_id) === Number(fieldId);
 }
 
+function isSpecialActionField(field) {
+  if (!field) {
+    return false;
+  }
+  const type = String(field.typ || "").toLowerCase();
+  return ["spezial", "gemeinschaft", "steuer", "los", "gefängnis", "gefaengnis"].includes(type);
+}
+
 function getPhaseChipText() {
   if (state.phase === "move") {
-    return "Wurf bestaetigen";
+    return "Bewegen";
   }
   if (state.phase === "field_action") {
     return "Feldaktion";
   }
-  return "Bereit";
+  return "Würfeln";
 }
 
 function getCenterCardCopy() {
   if (state.phase === "move" && state.displayRoll) {
-    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewuerfelt.`;
+    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewürfelt und zieht jetzt weiter.`;
   }
   if (state.phase === "field_action" && state.popupFeld) {
-    return `${state.activePlayerName} ist auf ${state.popupFeld.name} gelandet.`;
+    return state.popupHint || `${state.activePlayerName} wertet jetzt ${state.popupFeld.name} aus.`;
   }
-  return "Alles Wichtige bleibt im sichtbaren Bereich.";
+  return "Die Runde wartet auf den nächsten Wurf.";
+}
+
+function getInsightCopy(field) {
+  if (!field) {
+    return "Wähle ein Feld auf dem Spielbrett aus, um zusätzliche Informationen zu sehen.";
+  }
+  if (state.popupHint && isPendingField(field.feld_id)) {
+    return state.popupHint;
+  }
+  if (field.besitzer) {
+    return `${field.name} gehört aktuell ${field.besitzer}. Ein Besuch auf diesem Feld löst die passende Abgabe aus.`;
+  }
+  if (field.ist_kaufbar) {
+    return `${field.name} ist frei und kann beim nächsten Besuch gesichert werden.`;
+  }
+  return field.zusatz_regel || "Dieses Feld bringt Abwechslung in die Partie.";
 }
 
 function scoreCardMarkup(entry, index) {
@@ -61,22 +101,22 @@ function scoreCardMarkup(entry, index) {
         ${activeBadge}
       </div>
       <div class="score-metrics">
-        <span>Feld: ${escapeHtml(entry.position)}</span>
-        <span>Schlucke: ${escapeHtml(entry.drinks)}</span>
-        <span>Zuege: ${escapeHtml(entry.steps)}</span>
-        <span>Besitz: ${escapeHtml(entry.properties)}</span>
+        <span>Aktionspunkte: ${escapeHtml(entry.drinks)}</span>
+        <span>Schritte: ${escapeHtml(entry.steps)}</span>
+        <span>Gesicherte Felder: ${escapeHtml(entry.properties)}</span>
       </div>
+      <div class="score-position">Aktuelle Position: ${escapeHtml(entry.position)}</div>
     </article>
   `;
 }
 
 function ownershipMarkup(entry) {
-  const fields = entry.fields.length ? escapeHtml(entry.fields.join(", ")) : "Keine Felder";
+  const fields = entry.fields.length ? escapeHtml(entry.fields.join(", ")) : "Noch keine Felder";
   return `
     <article class="ownership-card">
       <strong>${escapeHtml(entry.owner)}</strong>
       <div class="ownership-meta">
-        <span>${escapeHtml(entry.count)} Feld${entry.count === 1 ? "" : "er"}</span>
+        <span>${escapeHtml(entry.count)} Feld${entry.count === 1 ? "" : "er"} gesichert</span>
         <span>${fields}</span>
       </div>
     </article>
@@ -84,7 +124,7 @@ function ownershipMarkup(entry) {
 }
 
 function eventMarkup(message, index) {
-  const label = index === 0 ? "Zuletzt" : `Eintrag ${index + 1}`;
+  const label = index === 0 ? "Neu" : `Eintrag ${index + 1}`;
   return `
     <article class="event-item">
       <strong>${label}</strong>
@@ -93,45 +133,62 @@ function eventMarkup(message, index) {
   `;
 }
 
+function statCardMarkup(label, value, meta) {
+  return `
+    <article class="stat-card">
+      <span class="stat-label">${escapeHtml(label)}</span>
+      <strong class="stat-value">${escapeHtml(value)}</strong>
+      <span class="stat-meta">${escapeHtml(meta)}</span>
+    </article>
+  `;
+}
+
 function buildFieldActions(field) {
   if (!isPendingField(field.feld_id)) {
-    return '<button type="button" class="secondary-btn" onclick="closeFieldModal()">Schliessen</button>';
+    return '<button type="button" class="secondary-btn" onclick="closeFieldModal()">Schließen</button>';
   }
 
   const activePlayerName = state.spieler[state.popupSpieler];
 
   if (!field.besitzer && field.ist_kaufbar) {
     return `
-      <button type="button" class="primary-btn" onclick="handleFieldAction('kaufen', ${field.feld_id})">Kaufen</button>
-      <button type="button" class="secondary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Nicht kaufen</button>
+      <button type="button" class="primary-btn" onclick="handleFieldAction('kaufen', ${field.feld_id})">Feld sichern</button>
+      <button type="button" class="secondary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Ohne Kauf weiter</button>
     `;
   }
 
   if (field.besitzer && field.besitzer !== activePlayerName) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Miete zahlen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestätigen</button>`;
   }
 
-  return '<button type="button" class="secondary-btn" onclick="handleFieldAction(\'skip\', ' + field.feld_id + ')">Weiter</button>';
+  if (isSpecialActionField(field)) {
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt auslösen</button>`;
+  }
+
+  return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Zug abschließen</button>`;
 }
 
 function createFieldDetails(field) {
-  const owner = field.besitzer ? field.besitzer : "Frei";
+  const owner = field.besitzer ? field.besitzer : "Noch frei";
   const intro = isPendingField(field.feld_id)
-    ? `${escapeHtml(state.activePlayerName)} muss dieses Feld jetzt abschliessen.`
-    : "Infoansicht fuer dieses Spielfeld.";
+    ? `${escapeHtml(state.activePlayerName)} befindet sich aktuell auf diesem Feld.`
+    : "Detailansicht für dieses Spielfeld.";
+  const note = isPendingField(field.feld_id) && state.popupHint
+    ? state.popupHint
+    : (field.zusatz_regel || "Dieses Feld besitzt keine zusätzliche Sonderregel.");
 
   return `
-    <div class="hero-badge">${isPendingField(field.feld_id) ? "Aktive Aktion" : "Feldinfo"}</div>
+    <div class="hero-badge">${isPendingField(field.feld_id) ? "Aktive Feldaktion" : "Spielfeld-Info"}</div>
     <h2>${escapeHtml(field.name)}</h2>
-    <p class="modal-intro">${intro}</p>
+    <p class="modal-intro">${escapeHtml(intro)}</p>
     <div class="modal-meta">
-      <div class="modal-row"><span>Typ</span><strong>${escapeHtml(field.typ)}</strong></div>
-      <div class="modal-row"><span>Besitzer</span><strong>${escapeHtml(owner)}</strong></div>
-      <div class="modal-row"><span>Kaufpreis</span><strong>${escapeHtml(field.kaufpreis || "-")}</strong></div>
-      <div class="modal-row"><span>Miete</span><strong>${escapeHtml(field.miete || "-")}</strong></div>
-      <div class="modal-row"><span>Getraenk</span><strong>${escapeHtml(field.alkohol_typ)} (${escapeHtml(field.alkohol_menge)})</strong></div>
-      <div class="modal-row"><span>Regel</span><strong>${escapeHtml(field.zusatz_regel || "-")}</strong></div>
+      <div class="modal-row"><span>Kategorie</span><strong>${escapeHtml(field.typ)}</strong></div>
+      <div class="modal-row"><span>Status</span><strong>${escapeHtml(owner)}</strong></div>
+      <div class="modal-row"><span>Preis</span><strong>${escapeHtml(field.kaufpreis || "—")}</strong></div>
+      <div class="modal-row"><span>Abgabe</span><strong>${escapeHtml(field.miete || "—")}</strong></div>
+      <div class="modal-row"><span>Bonus</span><strong>${escapeHtml(field.alkohol_typ)} · ${escapeHtml(field.alkohol_menge)}</strong></div>
     </div>
+    <div class="modal-note">${escapeHtml(note)}</div>
     <div class="modal-actions">${buildFieldActions(field)}</div>
   `;
 }
@@ -159,6 +216,7 @@ function renderBoardGrid() {
       const activeClass = state.positionen[state.aktiver] === fieldIndex ? " is-current" : "";
       const pendingClass = isPendingField(field.feld_id) ? " pending-action" : "";
       const owner = field.besitzer ? `<span class="field-owner">${escapeHtml(field.besitzer)}</span>` : "";
+      const price = field.kaufpreis ? `<span class="field-price">${escapeHtml(field.kaufpreis)}</span>` : "";
 
       html.push(`
         <button
@@ -167,10 +225,15 @@ function renderBoardGrid() {
           style="background: ${escapeHtml(field.farbe_css)};"
           onclick="showFieldInfo(${field.feld_id})"
         >
-          <span class="field-name">${escapeHtml(field.name)}</span>
-          <span class="field-type">${escapeHtml(field.typ)}</span>
-          ${owner}
-          <div class="field-players">${tokens}</div>
+          <div>
+            <span class="field-name">${escapeHtml(field.name)}</span>
+            <span class="field-type">${escapeHtml(field.typ)}</span>
+            ${owner}
+          </div>
+          <div>
+            ${price}
+            <div class="field-players">${tokens}</div>
+          </div>
         </button>
       `);
     }
@@ -185,9 +248,9 @@ function renderScoreboard() {
 }
 
 function renderOwnership() {
-  refs.ownershipCountChip.textContent = `${state.ownership.length} Besitzer`;
+  refs.ownershipCountChip.textContent = `${state.ownership.length} aktiv`;
   if (!state.ownership.length) {
-    refs.ownershipList.innerHTML = '<p class="empty-note">Noch hat niemand ein Feld gekauft.</p>';
+    refs.ownershipList.innerHTML = '<p class="empty-note">Noch wurde kein Feld dauerhaft gesichert.</p>';
     return;
   }
 
@@ -197,32 +260,69 @@ function renderOwnership() {
 function renderEventLog() {
   const entries = state.eventLog && state.eventLog.length
     ? state.eventLog.map(eventMarkup).join("")
-    : '<p class="empty-note">Der Spielverlauf erscheint hier.</p>';
+    : '<p class="empty-note">Der Spielverlauf erscheint hier, sobald die Runde startet.</p>';
   refs.eventLog.innerHTML = entries;
+}
+
+function renderQuickStats() {
+  const highlights = state.highlights || {};
+  const leaderName = highlights.leaderName || "Offen";
+  const leaderMeta = highlights.leaderName
+    ? `${highlights.leaderCount} Feld${highlights.leaderCount === 1 ? "" : "er"} vorne`
+    : "Noch kein Vorsprung";
+
+  refs.quickStats.innerHTML = [
+    statCardMarkup("Runde", `#${highlights.runde || 1}`, "Aktuell"),
+    statCardMarkup("Zug", `#${highlights.zugnummer || 1}`, "Gesamt"),
+    statCardMarkup("Spitze", leaderName, leaderMeta),
+    statCardMarkup("Frei", `${highlights.freieFelder ?? 0}`, "Noch offen"),
+  ].join("");
+}
+
+function renderBoardInsights() {
+  const focusField = getFocusField();
+  const nextAction = state.phase === "field_action"
+    ? "Feldaktion abschließen"
+    : state.phase === "move"
+      ? "Figur weiterziehen"
+      : "Würfeln";
+
+  refs.boardInsights.innerHTML = `
+    <article class="insight-card">
+      <span class="insight-label">Fokusfeld</span>
+      <strong>${escapeHtml(focusField ? focusField.name : "Bereit für den Start")}</strong>
+      <p>${escapeHtml(getInsightCopy(focusField))}</p>
+    </article>
+    <article class="insight-card">
+      <span class="insight-label">Nächster Schritt</span>
+      <strong>${escapeHtml(nextAction)}</strong>
+      <p>Weiße Umrandung zeigt die aktuelle Position. Gold markiert ein Feld, das noch ausgewertet werden muss.</p>
+      <div class="legend-row">
+        <span class="legend-pill"><span class="legend-dot legend-dot-active"></span>Aktive Position</span>
+        <span class="legend-pill"><span class="legend-dot legend-dot-pending"></span>Offene Aktion</span>
+      </div>
+    </article>
+  `;
 }
 
 function renderActionPanel() {
   const total = state.displayRoll ? state.displayRoll[0] + state.displayRoll[1] : null;
-  const title = state.activePlayerName || "Runde";
-  let body = "Bereit fuer den naechsten Zug.";
+  const title = state.activePlayerName || "Bereit";
+  let body = "Der nächste Zug kann gestartet werden.";
   let actions = `
-    <button type="button" class="primary-btn" onclick="handleRoll()" ${busy ? "disabled" : ""}>Wuerfeln</button>
+    <button type="button" class="primary-btn" onclick="handleRoll()" ${busy ? "disabled" : ""}>Würfeln</button>
   `;
 
   if (state.phase === "move" && total !== null) {
-    body = `${title} hat ${total} gewuerfelt und kann jetzt ziehen.`;
+    body = `${title} hat ${total} gewürfelt. Jetzt die Figur bewegen.`;
     actions = `
-      <button type="button" class="primary-btn" onclick="handleMove()" ${busy ? "disabled" : ""}>Zug ausfuehren</button>
+      <button type="button" class="primary-btn" onclick="handleMove()" ${busy ? "disabled" : ""}>Figur bewegen</button>
     `;
   } else if (state.phase === "field_action" && state.popupFeld) {
-    body = `${title} ist auf ${state.popupFeld.name} gelandet. Bitte die Feldaktion abschliessen.`;
+    body = state.popupHint || `${title} ist auf ${state.popupFeld.name} gelandet.`;
     actions = `
-      <button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feldaktion oeffnen</button>
+      <button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld öffnen</button>
     `;
-  }
-
-  if (state.lastEvent) {
-    body = `${body} ${state.lastEvent}`;
   }
 
   refs.phaseChip.textContent = getPhaseChipText();
@@ -232,12 +332,15 @@ function renderActionPanel() {
       <span>${escapeHtml(body)}</span>
     </div>
   `;
-  refs.commandActions.innerHTML = actions;
+  refs.centerPlayerName.textContent = title;
   refs.currentFieldButton.disabled = state.phase !== "field_action" || busy;
+  refs.commandActions.innerHTML = actions;
 }
 
 function renderCenterCard() {
-  refs.centerTitle.textContent = state.activePlayerName || "Bereit";
+  refs.centerTitle.textContent = state.phase === "field_action" && state.popupFeld
+    ? state.popupFeld.name
+    : (state.activePlayerName || "Bereit");
   refs.centerCopy.textContent = getCenterCardCopy();
   refs.rollStatus.textContent = state.lastEvent || "";
 
@@ -269,8 +372,10 @@ function renderApp() {
   renderScoreboard();
   renderOwnership();
   renderEventLog();
+  renderQuickStats();
   renderActionPanel();
   renderCenterCard();
+  renderBoardInsights();
   renderModal();
 }
 
@@ -325,7 +430,7 @@ async function postJson(url, payload = null) {
   const data = await response.json();
 
   if (!response.ok || !data.ok) {
-    throw new Error(data.msg || "Aktion konnte nicht ausgefuehrt werden.");
+    throw new Error(data.msg || "Aktion konnte nicht ausgeführt werden.");
   }
 
   return data;
@@ -338,9 +443,9 @@ function animateDice(roll) {
 
   window.clearInterval(animationTimer);
   let count = 0;
-  const maxCount = 12;
+  const maxCount = 10;
 
-  refs.rollStatus.textContent = `${state.activePlayerName} wuerfelt...`;
+  refs.rollStatus.textContent = `${state.activePlayerName} würfelt ...`;
 
   animationTimer = window.setInterval(() => {
     const randomOne = Math.floor(Math.random() * 6) + 1;
@@ -353,19 +458,63 @@ function animateDice(roll) {
       window.clearInterval(animationTimer);
       refs.w1.src = `/static/dice/${roll[0]}.png`;
       refs.w2.src = `/static/dice/${roll[1]}.png`;
-      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
+      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewürfelt.`;
     }
-  }, 80);
+  }, 75);
+}
+
+function openDrawer(key) {
+  closeDrawer();
+  const drawer = refs.drawers[key];
+  if (!drawer) {
+    return;
+  }
+
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  refs.drawerScrim.classList.add("open");
+  refs.drawerScrim.setAttribute("aria-hidden", "false");
+  activeDrawer = key;
+}
+
+function closeDrawer(key = null) {
+  if (key && activeDrawer !== key) {
+    const drawer = refs.drawers[key];
+    if (drawer) {
+      drawer.classList.remove("open");
+      drawer.setAttribute("aria-hidden", "true");
+    }
+    return;
+  }
+
+  DRAWER_KEYS.forEach((drawerKey) => {
+    const drawer = refs.drawers[drawerKey];
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+  });
+  refs.drawerScrim.classList.remove("open");
+  refs.drawerScrim.setAttribute("aria-hidden", "true");
+  activeDrawer = null;
+}
+
+function toggleDrawer(key) {
+  if (activeDrawer === key) {
+    closeDrawer();
+    return;
+  }
+  openDrawer(key);
 }
 
 function closeFieldModal() {
   selectedFieldId = null;
   renderModal();
+  renderBoardInsights();
 }
 
 function showFieldInfo(fieldId) {
   selectedFieldId = fieldId;
   renderModal();
+  renderBoardInsights();
 }
 
 function showPendingField() {
@@ -375,6 +524,7 @@ function showPendingField() {
 
   selectedFieldId = state.popupFeld.feld_id;
   renderModal();
+  renderBoardInsights();
 }
 
 async function handleRoll() {
@@ -442,15 +592,31 @@ function cacheRefs() {
   refs.commandActions = document.getElementById("commandActions");
   refs.phaseChip = document.getElementById("phaseChip");
   refs.turnSummary = document.getElementById("turnSummary");
+  refs.quickStats = document.getElementById("quickStats");
   refs.currentFieldButton = document.getElementById("currentFieldButton");
   refs.playerCountChip = document.getElementById("playerCountChip");
   refs.ownershipCountChip = document.getElementById("ownershipCountChip");
   refs.centerTitle = document.getElementById("centerTitle");
+  refs.centerPlayerName = document.getElementById("centerPlayerName");
   refs.centerCopy = document.getElementById("centerCopy");
   refs.rollStatus = document.getElementById("rollStatus");
+  refs.boardInsights = document.getElementById("boardInsights");
   refs.toast = document.getElementById("toast");
   refs.w1 = document.getElementById("w1");
   refs.w2 = document.getElementById("w2");
+  refs.drawerScrim = document.getElementById("drawerScrim");
+  refs.drawers = {
+    players: document.getElementById("playersPanel"),
+    ownership: document.getElementById("ownershipPanel"),
+    log: document.getElementById("logPanel"),
+    help: document.getElementById("helpPanel"),
+  };
+  refs.drawerButtons = {
+    players: document.getElementById("playersPanelButton"),
+    ownership: document.getElementById("ownershipPanelButton"),
+    log: document.getElementById("logPanelButton"),
+    help: document.getElementById("helpPanelButton"),
+  };
 }
 
 function bindEvents() {
@@ -458,6 +624,16 @@ function bindEvents() {
   refs.modal.addEventListener("click", (event) => {
     if (event.target === refs.modal) {
       closeFieldModal();
+    }
+  });
+  refs.drawerScrim.addEventListener("click", () => closeDrawer());
+  DRAWER_KEYS.forEach((key) => {
+    refs.drawerButtons[key].addEventListener("click", () => toggleDrawer(key));
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeFieldModal();
+      closeDrawer();
     }
   });
 }
@@ -477,6 +653,7 @@ function bootBoard() {
 
 document.addEventListener("DOMContentLoaded", bootBoard);
 
+window.closeDrawer = closeDrawer;
 window.closeFieldModal = closeFieldModal;
 window.showFieldInfo = showFieldInfo;
 window.showPendingField = showPendingField;

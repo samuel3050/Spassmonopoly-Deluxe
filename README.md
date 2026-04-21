@@ -1,26 +1,26 @@
-# Spassmonopoly-Deluxe
+# Spaßmonopoly Deluxe
 
-Spassmonopoly-Deluxe ist ein browserbasiertes Trinkspiel im Monopoly-Stil mit Lobby,
-Wuerfelanimation, Besitzsystem und responsivem Spielbrett.
+Spaßmonopoly Deluxe ist ein browserbasiertes Brettspiel mit moderner Oberfläche,
+klarer Zugführung, Besitzsystem und responsivem Spielbrett.
 
 ## Starten
 
 1. In den Projektordner wechseln:
    `cd Spassmonopoly-Deluxe`
-2. Abhaengigkeiten installieren:
+2. Abhängigkeiten installieren:
    `pip install -r requirements.txt`
 3. Server starten:
    `python game.py`
 
 Danach ist das Spiel unter `http://127.0.0.1:5000` erreichbar.
 
-## Verbesserungen
+## Highlights
 
-- Die App faellt automatisch auf integrierte Spielfeld-Daten zurueck, wenn MySQL fehlt.
-- Mit erreichbarer MySQL-Datenbank werden die Spielfelder weiter aus `spielfelder` geladen.
-- `app.py`, `flaskserver.py` und `game.py` starten jetzt dieselbe Haupt-App.
-- Das UI wurde fuer Desktop und Mobilgeraete deutlich aufgeraeumt.
-- Der Zugablauf ist stabiler: Wurf, Bewegung und Feldauswertung laufen sauber nacheinander.
+- Professionelle Start-, Lobby- und Spielansicht mit klarer UX.
+- Sauberer Zugablauf: würfeln, bewegen, Feld prüfen.
+- Fallback auf integrierte Spielfeld-Daten, falls keine MySQL-Datenbank erreichbar ist.
+- Besitzübersicht, Live-Spielverlauf und Rundenstatistiken in Echtzeit.
+- Einheitliche Sprache mit vollständigen Umlauten in der Oberfläche.
 
 ## Optionale Datenbank-Konfiguration
 

@@ -3,30 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spassmonopoly Deluxe</title>
+  <title>Spaßmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-home">
   <main class="hero-shell">
     <section class="hero-card">
-      <div class="hero-badge">Browser Game</div>
-      <h1>Spassmonopoly Deluxe</h1>
+      <div class="hero-badge">Gesellschaftsspiel im Browser</div>
+      <h1>Spaßmonopoly Deluxe</h1>
       <p class="hero-copy">
-        Trinkspiel trifft Brettspiel: stabil, modern und direkt im Browser spielbar.
-        Starte eine neue Runde und lass die Spieler nacheinander ueber das Feld ziehen.
+        Ein hochwertig inszeniertes Brettspiel-Erlebnis für gemeinsame Runden:
+        klarer Spielablauf, starkes Design und ein Spielfeld, das sofort Lust aufs Loslegen macht.
       </p>
 
       <form method="post" class="stack-form">
-        <label class="field-label" for="anzahl">Wie viele Spieler machen mit?</label>
+        <label class="field-label" for="anzahl">Wie viele Spielerinnen und Spieler sind dabei?</label>
         <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
-        <button type="submit" class="primary-btn">Neue Runde starten</button>
+        <button type="submit" class="primary-btn">Runde starten</button>
       </form>
 
       <div class="feature-row">
         <div class="feature-pill">2 bis 8 Spieler</div>
-        <div class="feature-pill">Responsives Spielfeld</div>
-        <div class="feature-pill">Mit oder ohne MySQL</div>
+        <div class="feature-pill">Desktop und mobil spielbar</div>
+        <div class="feature-pill">Klares Zugsystem in Echtzeit</div>
       </div>
+
+      <section class="hero-highlights">
+        <article class="hero-highlight-card">
+          <strong>Einfacher Einstieg</strong>
+          <p>Namen eingeben, Runde eröffnen und sofort auf dem Spielfeld loslegen.</p>
+        </article>
+        <article class="hero-highlight-card">
+          <strong>Professionelle UX</strong>
+          <p>Würfeln, bewegen und Feldaktion laufen sauber nacheinander und bleiben immer sichtbar.</p>
+        </article>
+        <article class="hero-highlight-card">
+          <strong>Motivierender Spielfluss</strong>
+          <p>Besitz, Ereignisse, Rundenstatus und Verlauf sind jederzeit klar und übersichtlich präsent.</p>
+        </article>
+      </section>
     </section>
   </main>
 </body>

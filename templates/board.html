@@ -3,101 +3,144 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spassmonopoly Deluxe</title>
+  <title>Spaßmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-board">
-  <main class="game-shell">
-    <header class="command-bar panel-card">
-      <div class="command-brand">
-        <div class="hero-badge">Live Runde</div>
-        <h1>Spassmonopoly Deluxe</h1>
-        <p class="panel-copy">
-          Kompakter Spielfluss ohne nerviges Hochscrollen, mit klarer Zugsteuerung und Fokus auf das aktive Feld.
-        </p>
+  <main class="game-shell game-shell-focus">
+    <header class="top-dock">
+      <div class="dock-brand">
+        <div class="hero-badge">Live-Runde</div>
+        <div>
+          <h1>Spaßmonopoly Deluxe</h1>
+          <p class="panel-copy">Klar, direkt und spielig. Das Spielfeld bleibt sichtbar, die Steuerung sitzt in der Mitte.</p>
+        </div>
       </div>
 
-      <section class="turn-card">
-        <div class="panel-heading">
-          <h2>Zugstatus</h2>
-          <span id="phaseChip" class="status-chip"></span>
-        </div>
-        <div id="turnSummary" class="turn-summary"></div>
-      </section>
-
-      <section class="command-actions-wrap">
-        <div id="commandActions" class="command-actions"></div>
+      <div class="dock-actions">
+        <button id="playersPanelButton" type="button" class="secondary-btn">Spieler</button>
+        <button id="ownershipPanelButton" type="button" class="secondary-btn">Besitz</button>
+        <button id="logPanelButton" type="button" class="secondary-btn">Verlauf</button>
+        <button id="helpPanelButton" type="button" class="secondary-btn">Hilfe</button>
         <form method="post" action="{{ url_for('neues_spiel') }}">
-          <button type="submit" class="secondary-btn full-width">Neue Runde</button>
+          <button type="submit" class="secondary-btn">Neue Runde</button>
         </form>
-      </section>
+      </div>
     </header>
 
-    <section class="board-layout">
-      <aside class="side-panel">
-        <div class="panel-card panel-scroll-card">
-          <div class="panel-heading">
-            <h2>Spieler</h2>
-            <span id="playerCountChip" class="status-chip"></span>
-          </div>
-          <div id="scoreList" class="score-list"></div>
-        </div>
-      </aside>
-
-      <section class="board-section">
-        <div class="board-stage">
-          <div class="board-toolbar">
+    <section class="board-focus-layout">
+      <section class="board-section board-section-focus">
+        <div class="board-stage board-stage-focus">
+          <div class="board-toolbar board-toolbar-focus">
             <div>
               <div class="hero-badge">Spielfeld</div>
-              <p class="board-copy">Klick auf ein Feld fuer Details. Aktive Feldaktionen erscheinen direkt als Modal.</p>
+              <p class="board-copy">Klicke auf ein Feld für Details. Spezialfelder lösen jetzt eigene Effekte aus.</p>
             </div>
-            <button id="currentFieldButton" type="button" class="secondary-btn">Aktuelles Feld</button>
+            <div class="toolbar-actions">
+              <button id="currentFieldButton" type="button" class="secondary-btn">Aktives Feld</button>
+            </div>
           </div>
 
-          <div class="board-frame">
+          <div class="board-frame board-frame-focus">
             <div id="boardGrid" class="board-grid"></div>
 
             <section class="board-center-card">
-              <div class="hero-badge">Zentrale</div>
+              <div class="center-topline">
+                <span id="phaseChip" class="status-chip"></span>
+                <strong id="centerPlayerName">Bereit</strong>
+              </div>
+
               <h2 id="centerTitle">Bereit</h2>
               <p id="centerCopy" class="center-copy"></p>
 
-              <div id="diceDisplay" class="dice-display">
-                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel eins">
-                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel zwei">
+              <div id="quickStats" class="quick-stats quick-stats-center"></div>
+
+              <div id="turnSummary" class="turn-summary turn-summary-center"></div>
+
+              <div id="diceDisplay" class="dice-display dice-display-center">
+                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel eins">
+                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel zwei">
               </div>
 
-              <div id="rollStatus" class="roll-status"></div>
+              <div id="commandActions" class="command-actions command-actions-center"></div>
+              <div id="rollStatus" class="roll-status roll-status-center"></div>
             </section>
           </div>
         </div>
       </section>
-
-      <aside class="side-panel">
-        <div class="panel-card panel-scroll-card">
-          <div class="panel-heading">
-            <h2>Besitz</h2>
-            <span id="ownershipCountChip" class="status-chip"></span>
-          </div>
-          <div id="ownershipList" class="ownership-list"></div>
-        </div>
-
-        <div class="panel-card panel-scroll-card">
-          <div class="panel-heading">
-            <h2>Spielverlauf</h2>
-            <span class="status-chip">Live</span>
-          </div>
-          <div id="eventLog" class="event-log"></div>
-        </div>
-      </aside>
     </section>
   </main>
+
+  <aside id="playersPanel" class="side-drawer" aria-hidden="true">
+    <div class="side-drawer-card">
+      <div class="panel-heading">
+        <h2>Spielerübersicht</h2>
+        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('players')">×</button>
+      </div>
+      <div class="drawer-meta">
+        <span id="playerCountChip" class="status-chip"></span>
+      </div>
+      <div id="scoreList" class="score-list"></div>
+    </div>
+  </aside>
+
+  <aside id="ownershipPanel" class="side-drawer" aria-hidden="true">
+    <div class="side-drawer-card">
+      <div class="panel-heading">
+        <h2>Besitz</h2>
+        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('ownership')">×</button>
+      </div>
+      <div class="drawer-meta">
+        <span id="ownershipCountChip" class="status-chip"></span>
+      </div>
+      <div id="ownershipList" class="ownership-list"></div>
+    </div>
+  </aside>
+
+  <aside id="logPanel" class="side-drawer" aria-hidden="true">
+    <div class="side-drawer-card">
+      <div class="panel-heading">
+        <h2>Spielverlauf</h2>
+        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('log')">×</button>
+      </div>
+      <div class="drawer-meta">
+        <span class="status-chip">Live</span>
+      </div>
+      <div id="eventLog" class="event-log"></div>
+    </div>
+  </aside>
+
+  <aside id="helpPanel" class="side-drawer" aria-hidden="true">
+    <div class="side-drawer-card">
+      <div class="panel-heading">
+        <h2>Spielhilfe</h2>
+        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('help')">×</button>
+      </div>
+      <div class="guide-list">
+        <article class="guide-item">
+          <strong>1. Würfeln</strong>
+          <p>Der Zug startet immer in der Mittelbox.</p>
+        </article>
+        <article class="guide-item">
+          <strong>2. Bewegen</strong>
+          <p>Danach ziehst du direkt auf das markierte Zielfeld.</p>
+        </article>
+        <article class="guide-item">
+          <strong>3. Effekt auslösen</strong>
+          <p>Kauf, Abgabe oder Spezialeffekt werden dann im Popup oder mit dem Weiter-Button abgeschlossen.</p>
+        </article>
+      </div>
+      <div id="boardInsights" class="board-insights board-insights-drawer"></div>
+    </div>
+  </aside>
+
+  <div id="drawerScrim" class="drawer-scrim" aria-hidden="true"></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <div id="fieldModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card">
-      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeFieldModal()">X</button>
+      <button type="button" class="modal-close" aria-label="Schließen" onclick="closeFieldModal()">×</button>
       <div id="fieldModalContent"></div>
     </div>
   </div>
