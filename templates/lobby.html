@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spaßmonopoly Deluxe - Lobby</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    .lobby-shell {
+      width: min(100%, 600px);
+      margin: 0 auto;
+    }
+
+    .lobby-card {
+      background: var(--panel);
+      border: 3px solid var(--panel-border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      padding: 36px;
+    }
+
+    .lobby-section {
+      margin-bottom: 28px;
+    }
+
+    .lobby-section h2 {
+      margin-bottom: 16px;
+      font-size: 1.3rem;
+    }
+
+    .join-form {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .join-form input {
+      flex: 1;
+      border: 3px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: #ffffff;
+      color: var(--text-dark);
+      font-size: 1rem;
+    }
+
+    .join-form button {
+      padding: 14px 24px;
+      border: none;
+      border-radius: 16px;
+      background: var(--accent-yellow);
+      color: var(--text-dark);
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: var(--shadow);
+    }
+
+    .join-form button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
+    }
+
+    .players-list {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .player-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      background: #fff;
+      border: 2px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      transition: background 0.2s;
+    }
+
+    .player-item.ready {
+      background: #f0ffe0;
+    }
+
+    .player-name {
+      font-weight: 600;
+      color: var(--text-dark);
+      flex: 1;
+    }
+
+    .player-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: #ffe0e0;
+      color: #c41e3a;
+    }
+
+    .player-status.ready {
+      background: #e0ffe0;
+      color: #2d7a2d;
+    }
+
+    .player-ready-btn {
+      margin-left: 12px;
+      padding: 10px 16px;
+      border: 2px solid var(--panel-border);
+      border-radius: 12px;
+      background: white;
+      color: var(--text-dark);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .player-ready-btn:hover {
+      background: var(--accent-yellow);
+    }
+
+    .player-ready-btn.ready {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: white;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-soft);
+    }
+
+    .lobby-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .primary-btn, .secondary-btn {
+      flex: 1;
+      padding: 16px 24px;
+      border: 3px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: var(--shadow);
+    }
+
+    .primary-btn {
+      background: var(--accent-yellow);
+      color: var(--text-dark);
+    }
+
+    .primary-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
+    }
+
+    .primary-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .secondary-btn {
+      background: var(--panel);
+      color: var(--text-dark);
+      border-color: var(--panel-border);
+    }
+
+    .secondary-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .status-message {
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .status-message.info {
+      background: #e3f2fd;
+      color: #1976d2;
+      border: 2px solid #1976d2;
+    }
+
+    .status-message.success {
+      background: #e8f5e9;
+      color: #388e3c;
+      border: 2px solid #388e3c;
+    }
+
+    .status-message.warning {
+      background: #fff3e0;
+      color: #f57c00;
+      border: 2px solid #f57c00;
+    }
+
+    .lobby-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .lobby-header h1 {
+      font-size: 2rem;
+      margin: 0 0 8px;
+    }
+
+    .lobby-header .hero-badge {
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      background: currentColor;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+      margin: 0 2px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body class="page page-lobby">
+  <main class="lobby-shell">
+    <section class="lobby-card">
+      <div class="lobby-header">
+        <div class="hero-badge" style="justify-content: center;">Warteraum</div>
+        <h1>Spaßmonopoly Deluxe</h1>
+        <p class="panel-copy">Wartet hier, bis sich alle Spieler verbunden haben und bereit sind.</p>
+      </div>
+
+      <div id="statusMessage"></div>
+
+      <div class="lobby-section" id="joinSection">
+        <h2>Dem Spiel beitreten</h2>
+        <form class="join-form" onsubmit="joinGame(event)">
+          <input 
+            type="text" 
+            id="playerName" 
+            placeholder="Dein Name..." 
+            required 
+            maxlength="20"
+            autocomplete="off"
+          >
+          <button type="submit">Beitreten</button>
+        </form>
+      </div>
+
+      <div class="lobby-section">
+        <h2>Spieler online (<span id="playerCount">0</span>)</h2>
+        <div id="playersList" class="players-list">
+          <div class="empty-state">Noch keine Spieler verbunden. Starten Sie jetzt!</div>
+        </div>
+      </div>
+
+      <div class="lobby-actions">
+        <button id="startBtn" class="primary-btn" onclick="startGame()" disabled>
+          Spiel starten
+        </button>
+        <button id="refreshBtn" class="secondary-btn" onclick="updateLobby()">
+          Aktualisieren
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let currentPlayerId = null;
+    let autoRefreshInterval = null;
+
+    function showStatus(message, type = 'info') {
+      const msgEl = document.getElementById('statusMessage');
+      msgEl.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+      setTimeout(() => {
+        msgEl.innerHTML = '';
+      }, 5000);
+    }
+
+    async function joinGame(event) {
+      event.preventDefault();
+      const name = document.getElementById('playerName').value.trim();
+      
+      if (!name) {
+        showStatus('Bitte gib deinen Namen ein', 'warning');
+        return;
+      }
+
+      try {
+        const response = await fetch('/lobby/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `name=${encodeURIComponent(name)}`
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          currentPlayerId = data.player_id;
+          document.getElementById('joinSection').style.display = 'none';
+          showStatus(`Willkommen ${name}! Bitte warte, bis alle Spieler bereit sind.`, 'success');
+          updateLobby();
+          startAutoRefresh();
+        } else {
+          showStatus(data.msg || 'Fehler beim Beitreten', 'warning');
+        }
+      } catch (err) {
+        showStatus('Verbindungsfehler', 'warning');
+      }
+    }
+
+    async function updateLobby() {
+      try {
+        const response = await fetch('/lobby/state');
+        const data = await response.json();
+
+        // Update player list
+        const playersList = document.getElementById('playersList');
+        const playerCount = document.getElementById('playerCount');
+        playerCount.textContent = data.players.length;
+
+        if (data.players.length === 0) {
+          playersList.innerHTML = '<div class="empty-state">Noch keine Spieler verbunden.</div>';
+          document.getElementById('startBtn').disabled = true;
+          return;
+        }
+
+        if (data.game_started) {
+          window.location.href = '/board';
+          return;
+        }
+
+        playersList.innerHTML = '';
+        data.players.forEach(player => {
+          const isCurrentPlayer = currentPlayerId === player.id;
+          const readyClass = player.ready ? 'ready' : '';
+          const statusText = player.ready ? '✓ Bereit' : 'Wartet...';
+          const statusClass = player.ready ? 'ready' : '';
+
+          const playerEl = document.createElement('div');
+          playerEl.className = `player-item ${readyClass}`;
+          playerEl.innerHTML = `
+            <span class="player-name">${player.name}</span>
+            <span class="player-status ${statusClass}">${statusText}</span>
+            ${isCurrentPlayer ? `<button class="player-ready-btn ${readyClass}" onclick="toggleReady()">
+              ${player.ready ? '✓ Bereit' : 'Bereit'}
+            </button>` : ''}
+          `;
+          playersList.appendChild(playerEl);
+        });
+
+        // Enable start button if all are ready
+        document.getElementById('startBtn').disabled = !data.all_ready || data.players.length < 2;
+      } catch (err) {
+        console.error('Fehler beim Aktualisieren:', err);
+      }
+    }
+
+    async function toggleReady() {
+      if (!currentPlayerId) return;
+
+      try {
+        const response = await fetch('/lobby/ready', {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          updateLobby();
+        }
+      } catch (err) {
+        showStatus('Fehler beim Ändern des Status', 'warning');
+      }
+    }
+
+    async function startGame() {
+      try {
+        const response = await fetch('/lobby/start', {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          showStatus('Spiel wird gestartet...', 'success');
+          setTimeout(() => {
+            window.location.href = '/board';
+          }, 500);
+        } else {
+          showStatus(data.msg || 'Fehler beim Starten', 'warning');
+        }
+      } catch (err) {
+        showStatus('Verbindungsfehler', 'warning');
+      }
+    }
+
+    function startAutoRefresh() {
+      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+      autoRefreshInterval = setInterval(updateLobby, 1000);
+    }
+
+    // Initial load
+    updateLobby();
+  </script>
+</body>
+</html>

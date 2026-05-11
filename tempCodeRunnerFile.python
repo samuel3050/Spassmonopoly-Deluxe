@@ -1,0 +1,121 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+import control as ctrl
+
+# ==========================================
+# 1. Systemdefinition (Strecke)
+# ==========================================
+Ks_system = 0.5  # Angenommener Wert für 0.04 * KNR
+num = [Ks_system]
+den = [4, 2, 1]
+sys = ctrl.TransferFunction(num, den)
+
+# Zeitvektor für die Simulation hochauflösend definieren
+t = np.linspace(0, 25, 2000)
+
+# ==========================================
+# 2. Wendetangentenverfahren (Approximation)
+# ==========================================
+# Sprungantwort der offenen Strecke ermitteln
+t_out, y = ctrl.step_response(sys, T=t)
+
+# Numerische Ableitung zur Findung des Wendepunkts (maximale Steigung)
+dy = np.gradient(y, t_out)
+idx_max = np.argmax(dy) 
+
+m = dy[idx_max]         # Steigung am Wendepunkt
+t_inf = t_out[idx_max]  # Zeitpunkt des Wendepunkts
+y_inf = y[idx_max]      # Y-Wert am Wendepunkt
+
+# Schnittpunkte berechnen
+Tu = t_inf - (y_inf / m)  # Verzugszeit (Schnittpunkt mit x-Achse)
+Tg = (Ks_system / m)      # Ausgleichszeit
+
+print("--- Systemanalyse ---")
+print(f"Stationäre Verstärkung Ks: {Ks_system}")
+print(f"Ermittelte Verzugszeit Tu: {Tu:.3f} s")
+print(f"Ermittelte Ausgleichszeit Tg: {Tg:.3f} s\n")
+
+# ==========================================
+# 3. CHR Methode - Parameter berechnen
+# ==========================================
+# Tabellenwerte für PID, Führungsverhalten, aperiodisch (0% Überschwingen)
+Kp_chr = (0.6 * Tg) / (Ks_system * Tu)
+Tn_chr = Tg
+Tv_chr = 0.5 * Tu
+
+# Umrechnung in parallele PID-Parameter für den Regler-Block
+Ki_chr = Kp_chr / Tn_chr
+Kd_chr = Kp_chr * Tv_chr
+
+print("--- Berechnete CHR Basis-Parameter ---")
+print(f"Kp = {Kp_chr:.3f}")
+print(f"Ki = {Ki_chr:.3f}")
+print(f"Kd = {Kd_chr:.3f}\n")
+
+# ==========================================
+# 4. Interaktiver Plot mit Schiebereglern
+# ==========================================
+fig, ax = plt.subplots(figsize=(12, 7))
+plt.subplots_adjust(bottom=0.35) # Platz für die Slider unten freihalten
+
+# Linienobjekte initialisieren
+line_closed, = ax.plot([], [], lw=2.5, color='blue', label='Geschlossener Kreis (PID)')
+line_open, = ax.plot(t_out, y, 'r--', lw=1.5, alpha=0.6, label='Offene Strecke (ungeregelt)')
+
+# Tangente zur Visualisierung des Wendetangentenverfahrens
+t_tangent = np.linspace(Tu, Tu + Tg, 100)
+y_tangent = m * (t_tangent - t_inf) + y_inf
+ax.plot(t_tangent, y_tangent, 'g:', lw=2, label='Wendetangente (Approximation)')
+
+# Plot-Design
+ax.set_xlim(0, 25)
+ax.set_ylim(0, 1.5)
+ax.axhline(1.0, color='black', linestyle='-', lw=1, label='Sollwert (w=1)')
+ax.set_title('Reglerauslegung: Einfluss der PID-Parameter auf die Sprungantwort')
+ax.set_xlabel('Zeit in Sekunden')
+ax.set_ylabel('Ausgangsamplitude y(t)')
+ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+ax.legend(loc='upper right')
+
+# ==========================================
+# 5. Logik für Regelkreis und Slider
+# ==========================================
+def simulate_closed_loop(Kp, Ki, Kd):
+    """Berechnet die Sprungantwort des geschlossenen Regelkreises."""
+    # Regler C(s) = Kd*s + Kp + Ki/s -> (Kd*s*s + Kp*s + Ki) / s
+    C = ctrl.TransferFunction([Kd, Kp, Ki], [1, 0])
+    
+    # Geschlossener Kreis T(s) = (C * G) / (1 + C * G)
+    T_closed = ctrl.feedback(C * sys, 1)
+    
+    # Simulation
+    t_c, y_c = ctrl.step_response(T_closed, T=t)
+    return y_c
+
+# Initiale Kurve mit CHR-Werten zeichnen
+line_closed.set_data(t, simulate_closed_loop(Kp_chr, Ki_chr, Kd_chr))
+
+# Slider definieren
+axcolor = 'lightgrey'
+ax_kp = plt.axes([0.15, 0.20, 0.75, 0.03], facecolor=axcolor)
+ax_ki = plt.axes([0.15, 0.13, 0.75, 0.03], facecolor=axcolor)
+ax_kd = plt.axes([0.15, 0.06, 0.75, 0.03], facecolor=axcolor)
+
+# Wir erlauben das Dreifache des CHR-Wertes als Maximum für den Slider
+s_kp = Slider(ax_kp, 'Kp (Proportional)', 0.1, Kp_chr * 3, valinit=Kp_chr, color='skyblue')
+s_ki = Slider(ax_ki, 'Ki (Integral)', 0.0, Ki_chr * 3, valinit=Ki_chr, color='lightgreen')
+s_kd = Slider(ax_kd, 'Kd (Differenzial)', 0.0, Kd_chr * 3, valinit=Kd_chr, color='salmon')
+
+def update(val):
+    """Wird aufgerufen, wenn ein Slider bewegt wird."""
+    line_closed.set_data(t, simulate_closed_loop(s_kp.val, s_ki.val, s_kd.val))
+    fig.canvas.draw_idle()
+
+# Events verknüpfen
+s_kp.on_changed(update)
+s_ki.on_changed(update)
+s_kd.on_changed(update)
+
+plt.show()
