@@ -71,6 +71,7 @@ lobby_state = {
 # Global game state for multiplayer
 game_state = {
     'players': [],
+    'player_ids': [],
     'positions': [],
     'points': [],
     'totals': [],
@@ -292,6 +293,24 @@ def redirect_if_game_missing():
         return redirect(url_for("lobby"))
     return None
 
+def get_current_player_index():
+    player_id = session.get("player_id")
+    player_ids = game_state.get("player_ids", [])
+    if not player_ids:
+        return game_state.get("active_player", 0)
+    if not player_id or player_id not in player_ids:
+        return None
+    return player_ids.index(player_id)
+
+def require_active_player():
+    current_index = get_current_player_index()
+    if current_index is None:
+        return "Du bist diesem Spiel nicht als Spieler zugeordnet."
+    if current_index != game_state.get("active_player", 0):
+        active_name = get_active_player_name() or "ein anderer Spieler"
+        return f"Bitte warten: {active_name} ist am Zug."
+    return None
+
 def get_scoreboard(fields):
     owner_counts = {}
     for field in fields:
@@ -394,6 +413,8 @@ def build_game_payload(fields=None, ownership=None):
         "appName": APP_NAME,
         "spieler": players,
         "aktiver": active_index,
+        "currentPlayerIndex": get_current_player_index(),
+        "canAct": get_current_player_index() == active_index,
         "activePlayerName": get_active_player_name(),
         "felder": fields,
         "positionen": game_state.get("positions", []),
@@ -482,7 +503,8 @@ def lobby_state_api():
 @app.route("/lobby/start", methods=["POST"])
 def lobby_start():
     # Überprüfe, ob alle bereit sind
-    players_list = list(lobby_state['players'].values())
+    lobby_entries = list(lobby_state['players'].items())
+    players_list = [entry[1] for entry in lobby_entries]
     if len(players_list) < 2:
         return jsonify({"ok": False, "msg": "Mindestens 2 Spieler erforderlich"}), 400
     
@@ -492,6 +514,7 @@ def lobby_start():
     # Initialisiere das Spiel
     player_names = [p['name'] for p in players_list]
     game_state["players"] = player_names
+    game_state["player_ids"] = [player_id for player_id, _ in lobby_entries]
     game_state["positions"] = [0 for _ in player_names]
     game_state["points"] = [0 for _ in player_names]
     game_state["totals"] = [0 for _ in player_names]
@@ -527,6 +550,7 @@ def namen():
             players.append(raw_name or f"Spieler {index}")
 
         game_state["players"] = players
+        game_state["player_ids"] = [session.get("player_id", "local-player")]
         game_state["positions"] = [0 for _ in players]
         game_state["points"] = [0 for _ in players]
         game_state["totals"] = [0 for _ in players]
@@ -543,11 +567,23 @@ def spiel():
 
     return render_board()
 
+@app.route("/api/state", methods=["GET"])
+def api_state():
+    missing_game = redirect_if_game_missing()
+    if missing_game:
+        return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 404
+
+    return jsonify({"ok": True, "state": build_game_payload()})
+
 @app.route("/zug_wuerfeln", methods=["POST"])
 def zug_wuerfeln():
     missing_game = redirect_if_game_missing()
     if missing_game:
         return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
+
+    active_error = require_active_player()
+    if active_error:
+        return jsonify({"ok": False, "msg": active_error, "state": build_game_payload()}), 403
 
     waiting_for_roll = game_state.get("waiting_for_roll", True)
     if not waiting_for_roll or game_state.get("pending_popup"):
@@ -568,6 +604,10 @@ def zug_ziehen():
     missing_game = redirect_if_game_missing()
     if missing_game:
         return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
+
+    active_error = require_active_player()
+    if active_error:
+        return jsonify({"ok": False, "msg": active_error, "state": build_game_payload()}), 403
 
     fields, _ = get_board_state()
     active_index = game_state.get("active_player", 0)
@@ -605,6 +645,10 @@ def feld_aktion():
     missing_game = redirect_if_game_missing()
     if missing_game:
         return jsonify({"ok": False, "msg": "Das Spiel wurde noch nicht gestartet."}), 400
+
+    active_error = require_active_player()
+    if active_error:
+        return jsonify({"ok": False, "msg": active_error, "state": build_game_payload()}), 403
 
     payload = request.get_json(silent=True) or {}
     action = payload.get("aktion")
@@ -665,6 +709,7 @@ def neues_spiel():
     game_state.clear()
     game_state.update({
         'players': [],
+        'player_ids': [],
         'positions': [],
         'points': [],
         'totals': [],

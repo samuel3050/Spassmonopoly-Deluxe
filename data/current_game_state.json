@@ -3,42 +3,33 @@
   "app_name": "Spassmonopoly Deluxe",
   "game": {
     "status": "running",
-    "phase": "roll",
-    "round": 2,
-    "turn_number": 5
+    "phase": "field_action",
+    "round": 1,
+    "turn_number": 1
   },
   "players": [
     {
       "id": "player-1",
       "name": "lolo",
-      "position": 15,
-      "action_points": 6,
-      "total_steps": 15,
+      "position": 6,
+      "action_points": 0,
+      "total_steps": 6,
       "status": "active"
     },
     {
       "id": "player-2",
-      "name": "sandi",
-      "position": 10,
-      "action_points": 6,
-      "total_steps": 10,
-      "status": "active"
-    },
-    {
-      "id": "player-3",
       "name": "sami",
-      "position": 7,
-      "action_points": 6,
-      "total_steps": 7,
+      "position": 0,
+      "action_points": 0,
+      "total_steps": 0,
       "status": "active"
     }
   ],
   "turn_order": [
     0,
-    1,
-    2
+    1
   ],
-  "active_player_index": 1,
+  "active_player_index": 0,
   "board": {
     "fields": [
       {
@@ -164,8 +155,8 @@
         "alkohol_typ": "Rhythmus",
         "alkohol_menge": "4 Punkte",
         "zusatz_regel": "Summt kurz einen Song, den alle kennen könnten.",
-        "besitzer": "sami",
-        "owner_player_id": "player-3",
+        "besitzer": null,
+        "owner_player_id": null,
         "index": 7,
         "ist_kaufbar": true
       },
@@ -212,8 +203,8 @@
         "alkohol_typ": "Idee",
         "alkohol_menge": "4 Punkte",
         "zusatz_regel": "Nenne etwas, das heute für gute Laune gesorgt hat.",
-        "besitzer": "sandi",
-        "owner_player_id": "player-2",
+        "besitzer": null,
+        "owner_player_id": null,
         "index": 10,
         "ist_kaufbar": true
       },
@@ -292,8 +283,8 @@
         "alkohol_typ": "Tempo",
         "alkohol_menge": "4 Punkte",
         "zusatz_regel": "Behalte den Schwung: dieses Feld steht für mutige Züge.",
-        "besitzer": "lolo",
-        "owner_player_id": "player-1",
+        "besitzer": null,
+        "owner_player_id": null,
         "index": 15,
         "ist_kaufbar": true
       },
@@ -686,64 +677,36 @@
   "dice": {
     "current_roll": null,
     "last_roll": [
-      5,
-      1
+      1,
+      5
     ],
     "history": [
       {
         "player_id": "player-1",
         "player_index": 0,
         "roll": [
-          5,
-          1
-        ],
-        "total": 6,
-        "turn_number": 4
-      },
-      {
-        "player_id": "player-3",
-        "player_index": 2,
-        "roll": [
-          6,
-          1
-        ],
-        "total": 7,
-        "turn_number": 3
-      },
-      {
-        "player_id": "player-2",
-        "player_index": 1,
-        "roll": [
-          4,
-          6
-        ],
-        "total": 10,
-        "turn_number": 2
-      },
-      {
-        "player_id": "player-1",
-        "player_index": 0,
-        "roll": [
-          4,
+          1,
           5
         ],
-        "total": 9,
+        "total": 6,
         "turn_number": 1
       }
     ]
   },
-  "pending_action": null,
-  "last_event": "sandi ist als Naechstes am Zug.",
+  "pending_action": {
+    "player_index": 0,
+    "player_id": "player-1",
+    "field_index": 6,
+    "field_id": 7,
+    "roll": [
+      1,
+      5
+    ]
+  },
+  "last_event": "lolo zieht auf Bühnenviertel.",
   "event_log": [
-    "sandi ist als Naechstes am Zug.",
-    "lolo sichert sich Abenteuerring fuer 6 Punkte.",
-    "lolo zieht auf Abenteuerring.",
+    "lolo zieht auf Bühnenviertel.",
     "lolo hat 6 gewuerfelt.",
-    "Runde 2 beginnt. lolo ist am Zug.",
-    "sami sichert sich Musikmarkt fuer 6 Punkte.",
-    "sami zieht auf Musikmarkt.",
-    "sami hat 7 gewuerfelt.",
-    "sami ist als Naechstes am Zug.",
-    "sandi sichert sich Kreativkai fuer 6 Punkte."
+    "lolo eroeffnet Runde 1."
   ]
 }

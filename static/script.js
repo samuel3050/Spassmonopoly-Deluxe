@@ -14,6 +14,8 @@ let activeDrawer = null;
 let busy = false;
 let toastTimer = null;
 let animationTimer = null;
+let statePollTimer = null;
+let lastStateSignature = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -144,8 +146,13 @@ function statCardMarkup(label, value, meta) {
 }
 
 function buildFieldActions(field) {
+  const canAct = state.canAct !== false;
   if (!isPendingField(field.feld_id)) {
     return '<button type="button" class="secondary-btn" onclick="closeFieldModal()">Schließen</button>';
+  }
+
+  if (!canAct) {
+    return `<button type="button" class="primary-btn" disabled>Warten auf ${escapeHtml(state.activePlayerName || "den aktiven Spieler")}</button>`;
   }
 
   const activePlayerName = state.spieler[state.popupSpieler];
@@ -308,15 +315,20 @@ function renderBoardInsights() {
 function renderActionPanel() {
   const total = state.displayRoll ? state.displayRoll[0] + state.displayRoll[1] : null;
   const title = state.activePlayerName || "Bereit";
+  const canAct = state.canAct !== false;
   let body = "Der nächste Zug kann gestartet werden.";
   let actions = `
-    <button type="button" class="primary-btn" onclick="handleRoll()" ${busy ? "disabled" : ""}>Würfeln</button>
+    <button type="button" class="primary-btn" onclick="handleRoll()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Wuerfeln" : "Warten"}</button>
   `;
+
+  if (!canAct) {
+    body = `${title} ist am Zug. Dein Board aktualisiert sich automatisch.`;
+  }
 
   if (state.phase === "move" && total !== null) {
     body = `${title} hat ${total} gewürfelt. Jetzt die Figur bewegen.`;
     actions = `
-      <button type="button" class="primary-btn" onclick="handleMove()" ${busy ? "disabled" : ""}>Figur bewegen</button>
+      <button type="button" class="primary-btn" onclick="handleMove()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>
     `;
   } else if (state.phase === "field_action" && state.popupFeld) {
     body = state.popupHint || `${title} ist auf ${state.popupFeld.name} gelandet.`;
@@ -430,10 +442,62 @@ async function postJson(url, payload = null) {
   const data = await response.json();
 
   if (!response.ok || !data.ok) {
-    throw new Error(data.msg || "Aktion konnte nicht ausgeführt werden.");
+    const error = new Error(data.msg || "Aktion konnte nicht ausgefuehrt werden.");
+    error.state = data.state;
+    throw error;
   }
 
   return data;
+}
+
+function getStateSignature(nextState) {
+  return JSON.stringify({
+    phase: nextState.phase,
+    active: nextState.aktiver,
+    positions: nextState.positionen,
+    points: nextState.konto,
+    totals: nextState.gesamt,
+    roll: nextState.displayRoll,
+    popupField: nextState.popupFeld ? nextState.popupFeld.feld_id : null,
+    lastEvent: nextState.lastEvent,
+    ownership: nextState.ownership,
+    canAct: nextState.canAct,
+  });
+}
+
+async function refreshState({ silent = true } = {}) {
+  if (busy) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/state");
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.msg || "Spielstand konnte nicht aktualisiert werden.");
+    }
+
+    const nextSignature = getStateSignature(data.state);
+    if (nextSignature !== lastStateSignature) {
+      const previousPhase = state.phase;
+      const previousRoll = state.displayRoll;
+      setState(data.state);
+      lastStateSignature = nextSignature;
+
+      if (
+        data.state.phase === "move"
+        && previousPhase !== "move"
+        && data.state.displayRoll
+        && JSON.stringify(previousRoll) !== JSON.stringify(data.state.displayRoll)
+      ) {
+        animateDice(data.state.displayRoll);
+      }
+    }
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message);
+    }
+  }
 }
 
 function animateDice(roll) {
@@ -536,8 +600,13 @@ async function handleRoll() {
   try {
     const data = await postJson("/zug_wuerfeln");
     setState(data.state, { toast: data.state.lastEvent });
+    lastStateSignature = getStateSignature(data.state);
     animateDice(data.state.displayRoll);
   } catch (error) {
+    if (error.state) {
+      setState(error.state);
+      lastStateSignature = getStateSignature(error.state);
+    }
     showToast(error.message);
   } finally {
     setBusy(false);
@@ -556,7 +625,12 @@ async function handleMove() {
       openPending: true,
       toast: data.state.lastEvent,
     });
+    lastStateSignature = getStateSignature(data.state);
   } catch (error) {
+    if (error.state) {
+      setState(error.state);
+      lastStateSignature = getStateSignature(error.state);
+    }
     showToast(error.message);
   } finally {
     setBusy(false);
@@ -575,7 +649,12 @@ async function handleFieldAction(action, fieldId) {
       closeModal: true,
       toast: data.state.lastEvent,
     });
+    lastStateSignature = getStateSignature(data.state);
   } catch (error) {
+    if (error.state) {
+      setState(error.state);
+      lastStateSignature = getStateSignature(error.state);
+    }
     showToast(error.message);
   } finally {
     setBusy(false);
@@ -642,6 +721,8 @@ function bootBoard() {
   cacheRefs();
   bindEvents();
   renderApp();
+  lastStateSignature = getStateSignature(state);
+  statePollTimer = window.setInterval(() => refreshState(), 1000);
 
   if (state.phase === "field_action" && state.popupFeld) {
     selectedFieldId = state.popupFeld.feld_id;
