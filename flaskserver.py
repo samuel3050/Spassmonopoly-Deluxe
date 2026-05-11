@@ -1,6 +1,5 @@
-from game import app, board_store
+from game import app
 
 
 if __name__ == "__main__":
-    board_store.reset_owners()
     app.run(debug=True)

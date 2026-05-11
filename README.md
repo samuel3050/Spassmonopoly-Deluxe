@@ -14,6 +14,22 @@ klarer Zugführung, Besitzsystem und responsivem Spielbrett.
 
 Danach ist das Spiel unter `http://127.0.0.1:5000` erreichbar.
 
+## Architektur
+
+Das Projekt ist in eine reine Engine und eine schlanke Flask-Oberflaeche getrennt:
+
+- `engine/game_engine.py`: Spiellogik ohne Flask-, HTML- oder Session-Abhaengigkeit.
+- `engine/state_io.py`: Laden und Speichern des zentralen JSON-Game-States.
+- `engine/view_state.py`: abgeleiteter UI-Snapshot aus dem kanonischen State.
+- `engine/board_store.py`: Spielfeld-Konfiguration aus MySQL oder `board_data.py`.
+- `game.py`: Flask-Routen; sie laden State, rufen Engine-Funktionen auf und speichern State.
+- `data/current_game_state.json`: laufender Server-State der lokalen Partie.
+
+Der kanonische State enthaelt Spieler, aktiven Spieler, Reihenfolge, Spielfeld,
+Wuerfelstatus, offene Feldaktionen, Spielstatus und Verlauf. Browser-Aktionen wie
+Wuerfeln, Ziehen und Feldaktion veraendern ausschliesslich diesen JSON-State ueber
+die Engine.
+
 ## Highlights
 
 - Professionelle Start-, Lobby- und Spielansicht mit klarer UX.

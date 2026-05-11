@@ -30,7 +30,8 @@ html {
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   font-family: var(--font-main);
   color: var(--text-dark);
   background:
@@ -262,14 +263,32 @@ button,
 }
 
 .page-board {
+  height: 100vh;
   padding: 14px;
+  overflow: hidden;
 }
 
 .game-shell {
   max-width: 1600px;
+  height: 100%;
   margin: 0 auto;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
+}
+
+.board-focus-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .top-dock {
@@ -318,6 +337,10 @@ button,
   border-radius: 30px;
   background: var(--board);
   box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .board-toolbar {
@@ -335,18 +358,21 @@ button,
 
 .board-frame {
   position: relative;
-  aspect-ratio: auto;
-  min-height: min(80vh, 1020px);
+  aspect-ratio: 1 / 1;
+  max-height: 100%;
+  max-width: 100%;
+  margin: 0 auto;
   padding: 12px;
   border: 3px solid var(--board-border);
   border-radius: 26px;
   background: #fef7d9;
+  flex: 1;
+  min-height: 0;
 }
 
 .board-grid {
   width: 100%;
   height: 100%;
-  min-height: inherit;
   display: grid;
   grid-template-columns: repeat(11, minmax(0, 1fr));
   grid-template-rows: repeat(11, minmax(0, 1fr));
