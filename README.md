@@ -47,3 +47,4 @@ Wenn du MySQL verwenden willst, kannst du diese Umgebungsvariablen setzen:
 - `DB_PASSWORD`
 - `DB_NAME`
 - `FLASK_SECRET_KEY`
+
