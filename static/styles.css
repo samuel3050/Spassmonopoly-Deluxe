@@ -135,6 +135,12 @@ h3 {
   margin-top: 26px;
 }
 
+.start-menu {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
 .field-label {
   font-size: 0.92rem;
   font-weight: 700;

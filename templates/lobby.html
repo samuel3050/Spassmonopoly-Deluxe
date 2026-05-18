@@ -242,6 +242,17 @@
         <p class="panel-copy">Wartet hier, bis sich alle Spieler verbunden haben und bereit sind.</p>
       </div>
 
+      <div class="lobby-actions" style="margin-bottom: 24px;">
+        <form method="post" action="{{ url_for('lobby_continue') }}" style="flex: 1;">
+          <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
+            Continue Last Game
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('lobby_new') }}" style="flex: 1;">
+          <button type="submit" class="secondary-btn">New Game</button>
+        </form>
+      </div>
+
       <div id="statusMessage"></div>
 
       <div class="lobby-section" id="joinSection">

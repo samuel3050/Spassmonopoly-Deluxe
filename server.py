@@ -22,8 +22,17 @@ else:
     mysql = mysql.connector
 
 from board_data import DEFAULT_FIELDS
+from engine.state_io import (
+    DEFAULT_ROOM_ID as DEFAULT_SAVE_ROOM_ID,
+    delete_game_state as delete_saved_room,
+    has_save_game as has_room_save,
+    load_game_state as read_room_save,
+    save_game_state as write_room_save,
+)
 
 APP_NAME = "Spaßmonopoly Deluxe"
+DEFAULT_ROOM_ID = os.getenv("GAME_ROOM_ID", DEFAULT_SAVE_ROOM_ID)
+ROOM_SAVE_VERSION = 1
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
@@ -85,6 +94,119 @@ game_state = {
 }
 
 board_store = None
+
+
+def default_game_state():
+    return {
+        'players': [],
+        'player_ids': [],
+        'positions': [],
+        'points': [],
+        'totals': [],
+        'active_player': 0,
+        'round': 1,
+        'turn': 1,
+        'waiting_for_roll': True,
+        'roll': None,
+        'letzter_wurf': None,
+        'pending_popup': None,
+        'event_log': [],
+        'last_event': None,
+        'board': {
+            'fields': [],
+        },
+        'room_id': DEFAULT_ROOM_ID,
+    }
+
+
+def default_lobby_state():
+    return {
+        'players': {},
+        'game_started': False,
+        'room_id': DEFAULT_ROOM_ID,
+    }
+
+
+def current_room_id():
+    return session.get("room_id") or DEFAULT_ROOM_ID
+
+
+def normalize_loaded_room(snapshot):
+    if not isinstance(snapshot, dict):
+        return None
+    if "game_state" in snapshot:
+        return snapshot
+    if "players" in snapshot:
+        return {
+            "schema_version": ROOM_SAVE_VERSION,
+            "room_id": snapshot.get("room_id", DEFAULT_ROOM_ID),
+            "lobby_state": default_lobby_state(),
+            "game_state": snapshot,
+        }
+    return None
+
+
+def load_game_state(room_id=DEFAULT_ROOM_ID):
+    snapshot = normalize_loaded_room(read_room_save(room_id))
+    if not snapshot:
+        return None
+
+    loaded_game = default_game_state()
+    loaded_game.update(snapshot.get("game_state") or {})
+    loaded_game["room_id"] = room_id
+    loaded_game.setdefault("board", {})
+    loaded_game["board"].setdefault("fields", [])
+
+    loaded_lobby = default_lobby_state()
+    loaded_lobby.update(snapshot.get("lobby_state") or {})
+    loaded_lobby["room_id"] = room_id
+
+    game_state.clear()
+    game_state.update(loaded_game)
+    lobby_state.clear()
+    lobby_state.update(loaded_lobby)
+    return game_state
+
+
+def save_game_state(room_id=DEFAULT_ROOM_ID):
+    fields = game_state.get("board", {}).get("fields")
+    if not fields and board_store is not None:
+        game_state.setdefault("board", {})["fields"] = board_store.load_fields()
+
+    snapshot = {
+        "schema_version": ROOM_SAVE_VERSION,
+        "room_id": room_id,
+        "lobby_state": copy.deepcopy(lobby_state),
+        "game_state": copy.deepcopy(game_state),
+    }
+    write_room_save(room_id, snapshot)
+    return snapshot
+
+
+def create_new_game(room_id=DEFAULT_ROOM_ID, lobby_entries=None):
+    entries = list(lobby_entries or [])
+    player_names = [entry[1]["name"] for entry in entries]
+    player_ids = [entry[0] for entry in entries]
+
+    game_state.clear()
+    game_state.update(default_game_state())
+    game_state["room_id"] = room_id
+    game_state["players"] = player_names
+    game_state["player_ids"] = player_ids
+    game_state["positions"] = [0 for _ in player_names]
+    game_state["points"] = [0 for _ in player_names]
+    game_state["totals"] = [0 for _ in player_names]
+    if board_store is not None:
+        board_store.reset_owners()
+    game_state["board"]["fields"] = board_store.load_fields() if board_store is not None else []
+
+    if player_names:
+        push_event(f"{player_names[0]} erÃ¶ffnet Runde 1.")
+
+    lobby_state["game_started"] = bool(player_names)
+    lobby_state["room_id"] = room_id
+    save_game_state(room_id)
+    return game_state
 
 def normalize_text(value):
     text = str(value or "").strip().lower().replace("ß", "ss")
@@ -276,14 +398,23 @@ class BoardStore:
 
         return updated
 
+if board_store is None:
+    board_store = BoardStore()
+    if not load_game_state(DEFAULT_ROOM_ID):
+        game_state.setdefault("board", {})["fields"] = board_store.load_fields()
+
 def get_board_state():
-    fields = board_store.load_fields()
+    saved_fields = game_state.get("board", {}).get("fields")
+    fields = copy_fields(saved_fields) if saved_fields else board_store.load_fields()
     ownership = {}
     for field in fields:
         owner = field.get("besitzer")
         if owner:
             ownership.setdefault(owner, []).append(field)
     return fields, ownership
+
+def persist_board_fields(fields):
+    game_state.setdefault("board", {})["fields"] = copy_fields(fields)
 
 def ensure_game_in_session():
     return bool(game_state.get("players"))
@@ -455,7 +586,7 @@ def index():
 
 @app.route("/lobby", methods=["GET"])
 def lobby_page():
-    return render_template("lobby.html")
+    return render_template("lobby.html", has_saved_game=has_room_save(current_room_id()))
 
 @app.route("/lobby/join", methods=["POST"])
 def lobby_join():
@@ -467,6 +598,8 @@ def lobby_join():
     lobby_state['players'][player_id] = {'name': name, 'ready': False}
     session['player_id'] = player_id
     session['player_name'] = name
+    session['room_id'] = current_room_id()
+    save_game_state(current_room_id())
     
     return jsonify({
         "ok": True,
@@ -480,6 +613,7 @@ def lobby_ready():
         return jsonify({"ok": False, "msg": "Nicht in der Lobby"}), 400
     
     lobby_state['players'][player_id]['ready'] = not lobby_state['players'][player_id]['ready']
+    save_game_state(current_room_id())
     return jsonify({"ok": True})
 
 @app.route("/lobby/state", methods=["GET"])
@@ -511,31 +645,36 @@ def lobby_start():
     if not all(p['ready'] for p in players_list):
         return jsonify({"ok": False, "msg": "Nicht alle Spieler sind bereit"}), 400
     
-    # Initialisiere das Spiel
-    player_names = [p['name'] for p in players_list]
-    game_state["players"] = player_names
-    game_state["player_ids"] = [player_id for player_id, _ in lobby_entries]
-    game_state["positions"] = [0 for _ in player_names]
-    game_state["points"] = [0 for _ in player_names]
-    game_state["totals"] = [0 for _ in player_names]
-    game_state["active_player"] = 0
-    game_state["round"] = 1
-    game_state["turn"] = 1
-    game_state["waiting_for_roll"] = True
-    game_state["roll"] = None
-    game_state["pending_popup"] = None
-    game_state["event_log"] = []
-    
-    push_event(f"{player_names[0]} eröffnet Runde 1.")
-    lobby_state['game_started'] = True
-    
+    create_new_game(current_room_id(), lobby_entries)
     return jsonify({"ok": True})
+
+@app.route("/lobby/continue", methods=["POST"])
+def lobby_continue():
+    if not load_game_state(current_room_id()):
+        return redirect(url_for("lobby"))
+    lobby_state["game_started"] = bool(game_state.get("players"))
+    save_game_state(current_room_id())
+    return redirect(url_for("spiel" if game_state.get("players") else "lobby"))
+
+@app.route("/lobby/new", methods=["POST"])
+def lobby_new():
+    delete_saved_room(current_room_id())
+    game_state.clear()
+    game_state.update(default_game_state())
+    lobby_state.clear()
+    lobby_state.update(default_lobby_state())
+    board_store.reset_owners()
+    game_state["board"]["fields"] = board_store.load_fields()
+    save_game_state(current_room_id())
+    return redirect(url_for("lobby"))
 
 @app.route("/", methods=["POST"])
 def index_post():
+    delete_saved_room(current_room_id())
     player_count = max(2, min(8, int(request.form.get("anzahl", 4))))
     session.clear()
     session["anzahl"] = player_count
+    session["room_id"] = DEFAULT_ROOM_ID
     return redirect(url_for("namen"))
 
 @app.route("/namen", methods=["GET", "POST"])
@@ -549,12 +688,8 @@ def namen():
             raw_name = request.form.get(f"spieler{index}", "").strip()
             players.append(raw_name or f"Spieler {index}")
 
-        game_state["players"] = players
-        game_state["player_ids"] = [session.get("player_id", "local-player")]
-        game_state["positions"] = [0 for _ in players]
-        game_state["points"] = [0 for _ in players]
-        game_state["totals"] = [0 for _ in players]
-        push_event(f"{players[0]} eröffnet Runde 1.")
+        entries = [(f"local-player-{index + 1}", {"name": name}) for index, name in enumerate(players)]
+        create_new_game(current_room_id(), entries)
         return redirect(url_for("spiel"))
 
     return render_template("spielernamen.html", anzahl=session["anzahl"])
@@ -597,6 +732,7 @@ def zug_wuerfeln():
     game_state["letzter_wurf"] = roll
     game_state["waiting_for_roll"] = False
     push_event(f"{get_active_player_name()} hat {dice_1 + dice_2} gewürfelt.")
+    save_game_state(current_room_id())
     return jsonify({"ok": True, "state": build_game_payload()})
 
 @app.route("/zug_ziehen", methods=["POST"])
@@ -638,6 +774,7 @@ def zug_ziehen():
     }
     game_state["roll"] = None
     push_event(f"{get_active_player_name()} zieht auf {fields[new_position]['name']}.")
+    save_game_state(current_room_id())
     return jsonify({"ok": True, "state": build_game_payload()})
 
 @app.route("/feld_aktion", methods=["POST"])
@@ -677,6 +814,9 @@ def feld_aktion():
             return jsonify({"ok": False, "msg": "Dieses Feld gehört bereits jemandem."}), 400
 
         board_store.set_owner(field["feld_id"], player_name)
+        field["besitzer"] = player_name
+        fields[field["index"]] = field
+        persist_board_fields(fields)
         clamp_points(points, active_index, parse_number(field.get("kaufpreis")))
         game_state["points"] = points
         push_event(f"{player_name} sichert sich {field['name']} für {field.get('kaufpreis') or '0'}.")
@@ -702,34 +842,24 @@ def feld_aktion():
     game_state["pending_popup"] = None
     game_state["waiting_for_roll"] = True
     advance_turn_from(active_index)
+    save_game_state(current_room_id())
     return jsonify({"ok": True, "state": build_game_payload()})
 
 @app.route("/neues_spiel", methods=["POST"])
 def neues_spiel():
     game_state.clear()
-    game_state.update({
-        'players': [],
-        'player_ids': [],
-        'positions': [],
-        'points': [],
-        'totals': [],
-        'active_player': 0,
-        'round': 1,
-        'turn': 1,
-        'waiting_for_roll': True,
-        'roll': None,
-        'pending_popup': None,
-        'event_log': []
-    })
+    game_state.update(default_game_state())
     lobby_state.clear()
-    lobby_state.update({
-        'players': {},
-        'game_started': False
-    })
+    lobby_state.update(default_lobby_state())
     board_store.reset_owners()
+    game_state["board"]["fields"] = board_store.load_fields()
+    delete_saved_room(current_room_id())
+    save_game_state(current_room_id())
     return redirect(url_for("lobby"))
 
 if __name__ == "__main__":
     board_store = BoardStore()
-    board_store.reset_owners()
+    if not load_game_state(DEFAULT_ROOM_ID):
+        board_store.reset_owners()
+        game_state.setdefault("board", {})["fields"] = board_store.load_fields()
     app.run(debug=True, host='0.0.0.0', port=5000)
