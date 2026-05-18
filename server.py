@@ -582,7 +582,7 @@ def render_board():
 
 @app.route("/", methods=["GET"])
 def index():
-    return redirect(url_for("lobby"))
+    return redirect(url_for("lobby_page"))
 
 @app.route("/lobby", methods=["GET"])
 def lobby_page():
@@ -651,10 +651,10 @@ def lobby_start():
 @app.route("/lobby/continue", methods=["POST"])
 def lobby_continue():
     if not load_game_state(current_room_id()):
-        return redirect(url_for("lobby"))
+        return redirect(url_for("lobby_page"))
     lobby_state["game_started"] = bool(game_state.get("players"))
     save_game_state(current_room_id())
-    return redirect(url_for("spiel" if game_state.get("players") else "lobby"))
+    return redirect(url_for("spiel" if game_state.get("players") else "lobby_page"))
 
 @app.route("/lobby/new", methods=["POST"])
 def lobby_new():
@@ -666,7 +666,7 @@ def lobby_new():
     board_store.reset_owners()
     game_state["board"]["fields"] = board_store.load_fields()
     save_game_state(current_room_id())
-    return redirect(url_for("lobby"))
+    return redirect(url_for("lobby_page"))
 
 @app.route("/", methods=["POST"])
 def index_post():
@@ -855,7 +855,7 @@ def neues_spiel():
     game_state["board"]["fields"] = board_store.load_fields()
     delete_saved_room(current_room_id())
     save_game_state(current_room_id())
-    return redirect(url_for("lobby"))
+    return redirect(url_for("lobby_page"))
 
 if __name__ == "__main__":
     board_store = BoardStore()
