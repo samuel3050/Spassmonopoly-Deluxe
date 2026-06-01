@@ -11,7 +11,9 @@ except ImportError as exc:
     ) from exc
 
 from engine.board_store import BoardStore
+from engine.database import create_tables, init_db
 from engine.game_engine import apply_field_effect, ensure_field_shape, init_game, move_player, roll_dice
+from engine.game_save_service import GameSaveService
 from engine.state_io import (
     DEFAULT_ROOM_ID,
     delete_game_state as delete_saved_game_state,
@@ -29,9 +31,13 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
 app.json.ensure_ascii = False
 
+init_db(app)
+create_tables(app)
+
 board_store = BoardStore()
-if ROOM_ID == DEFAULT_ROOM_ID:
-    migrate_legacy_save(ROOM_ID)
+with app.app_context():
+    if ROOM_ID == DEFAULT_ROOM_ID:
+        migrate_legacy_save(ROOM_ID)
 
 lobby_state = {
     "players": {},
@@ -284,11 +290,131 @@ def json_error(message, status_code=400):
 
 
 def render_board():
-    game_state = get_current_state()
-    return render_template(
-        "board.html",
-        game_state=build_game_payload(game_state, current_player_id=session.get("player_id")),
-    )
+    with app.app_context():
+        game_state = get_current_state()
+        return render_template(
+            "board.html",
+            game_state=build_game_payload(game_state, current_player_id=session.get("player_id")),
+        )
+
+
+@app.route("/api/saves", methods=["GET"])
+def api_list_saves():
+    """List all saved games."""
+    try:
+        with app.app_context():
+            saves = GameSaveService.list_saves()
+            return jsonify({
+                "ok": True,
+                "saves": [save.to_dict() for save in saves],
+            })
+    except Exception as e:
+        return json_error(f"Error listing saves: {str(e)}", 500)
+
+
+@app.route("/api/save/<save_id>", methods=["GET"])
+def api_get_save(save_id):
+    """Get details of a specific save."""
+    try:
+        with app.app_context():
+            game_save = GameSaveService.load_save(save_id)
+            if not game_save:
+                return json_error("Save not found", 404)
+            return jsonify({
+                "ok": True,
+                "save": game_save.to_dict(),
+            })
+    except Exception as e:
+        return json_error(f"Error loading save: {str(e)}", 500)
+
+
+@app.route("/api/save/<save_id>/load", methods=["POST"])
+def api_load_save(save_id):
+    """Load a saved game."""
+    try:
+        with app.app_context():
+            game_save = GameSaveService.load_save(save_id)
+            if not game_save:
+                return json_error("Save not found", 404)
+
+            game_state = game_save.get_game_state()
+            session.clear()
+            return jsonify({
+                "ok": True,
+                "message": f"Loaded '{game_save.name}'",
+                "save_id": save_id,
+            })
+    except Exception as e:
+        return json_error(f"Error loading save: {str(e)}", 500)
+
+
+@app.route("/api/save/<save_id>/rename", methods=["POST"])
+def api_rename_save(save_id):
+    """Rename a saved game."""
+    try:
+        data = request.get_json(silent=True) or {}
+        new_name = data.get("name", "").strip()
+
+        if not new_name:
+            return json_error("Name is required", 400)
+
+        with app.app_context():
+            game_save = GameSaveService.rename_save(save_id, new_name)
+            if not game_save:
+                return json_error("Save not found", 404)
+
+            return jsonify({
+                "ok": True,
+                "message": f"Renamed to '{new_name}'",
+                "save": game_save.to_dict(),
+            })
+    except ValueError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        return json_error(f"Error renaming save: {str(e)}", 500)
+
+
+@app.route("/api/save/<save_id>/delete", methods=["POST"])
+def api_delete_save(save_id):
+    """Delete a saved game."""
+    try:
+        with app.app_context():
+            success = GameSaveService.delete_save(save_id)
+            if not success:
+                return json_error("Save not found", 404)
+
+            return jsonify({
+                "ok": True,
+                "message": "Save deleted",
+            })
+    except Exception as e:
+        return json_error(f"Error deleting save: {str(e)}", 500)
+
+
+@app.route("/api/save/<save_id>/duplicate", methods=["POST"])
+def api_duplicate_save(save_id):
+    """Duplicate a saved game."""
+    try:
+        data = request.get_json(silent=True) or {}
+        new_name = data.get("name", "").strip()
+
+        if not new_name:
+            return json_error("Name is required", 400)
+
+        with app.app_context():
+            game_save = GameSaveService.duplicate_save(save_id, new_name)
+            if not game_save:
+                return json_error("Save not found", 404)
+
+            return jsonify({
+                "ok": True,
+                "message": f"Duplicated to '{new_name}'",
+                "save": game_save.to_dict(),
+            })
+    except ValueError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        return json_error(f"Error duplicating save: {str(e)}", 500)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -300,74 +426,78 @@ def index():
         session["anzahl"] = player_count
         return redirect(url_for("namen"))
 
-    return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID))
+    with app.app_context():
+        return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID))
 
 
 @app.route("/continue", methods=["POST"])
 def continue_game():
     if not has_saved_game(ROOM_ID):
         return redirect(url_for("index"))
-    load_game_state(ROOM_ID)
+    with app.app_context():
+        load_game_state(ROOM_ID)
     return redirect(url_for("spiel"))
 
 
 @app.route("/lobby", methods=["GET"])
 def lobby_page():
-    load_game_state(ROOM_ID)
-    return render_template(
-        "lobby.html",
-        has_saved_game=has_saved_game(ROOM_ID),
-        current_player_id=session.get("player_id"),
-    )
+    with app.app_context():
+        load_game_state(ROOM_ID)
+        return render_template(
+            "lobby.html",
+            has_saved_game=has_saved_game(ROOM_ID),
+            current_player_id=session.get("player_id"),
+        )
 
 
 @app.route("/lobby/join", methods=["POST"])
 def lobby_join():
-    load_game_state(ROOM_ID)
-    name = request.form.get("name", "").strip()
-    if not name:
-        return json_error("Name erforderlich")
+    with app.app_context():
+        load_game_state(ROOM_ID)
+        name = request.form.get("name", "").strip()
+        if not name:
+            return json_error("Name erforderlich")
 
-    current_game = get_current_state()
-    existing_player = None
-    if current_game:
-        for player in current_game.get("players", []):
-            if player["name"].strip().lower() == name.lower():
-                existing_player = player
-                break
+        current_game = get_current_state()
+        existing_player = None
+        if current_game:
+            for player in current_game.get("players", []):
+                if player["name"].strip().lower() == name.lower():
+                    existing_player = player
+                    break
 
-    if lobby_state.get("game_started") and current_game:
-        if existing_player is None:
-            return json_error("Dieses Spiel laeuft bereits. Bitte mit einem vorhandenen Spielernamen verbinden.", 409)
-        session["player_id"] = existing_player["id"]
-        session["player_name"] = existing_player["name"]
+        if lobby_state.get("game_started") and current_game:
+            if existing_player is None:
+                return json_error("Dieses Spiel laeuft bereits. Bitte mit einem vorhandenen Spielernamen verbinden.", 409)
+            session["player_id"] = existing_player["id"]
+            session["player_name"] = existing_player["name"]
+            session["room_id"] = ROOM_ID
+            return jsonify({"ok": True, "player_id": existing_player["id"], "game_started": True})
+
+        if existing_player is not None:
+            player_id = existing_player["id"]
+        else:
+            matching_player_id = next(
+                (
+                    player_id
+                    for player_id, player in lobby_state.get("players", {}).items()
+                    if player["name"].strip().lower() == name.lower()
+                ),
+                None,
+            )
+            player_id = matching_player_id or str(uuid4())
+
+        lobby_state.setdefault("players", {})[player_id] = {
+            "name": name,
+            "ready": bool(lobby_state.get("players", {}).get(player_id, {}).get("ready", False)),
+        }
+        lobby_state["room_id"] = ROOM_ID
+        lobby_state["game_started"] = False
+        session["player_id"] = player_id
+        session["player_name"] = name
         session["room_id"] = ROOM_ID
-        return jsonify({"ok": True, "player_id": existing_player["id"], "game_started": True})
 
-    if existing_player is not None:
-        player_id = existing_player["id"]
-    else:
-        matching_player_id = next(
-            (
-                player_id
-                for player_id, player in lobby_state.get("players", {}).items()
-                if player["name"].strip().lower() == name.lower()
-            ),
-            None,
-        )
-        player_id = matching_player_id or str(uuid4())
-
-    lobby_state.setdefault("players", {})[player_id] = {
-        "name": name,
-        "ready": bool(lobby_state.get("players", {}).get(player_id, {}).get("ready", False)),
-    }
-    lobby_state["room_id"] = ROOM_ID
-    lobby_state["game_started"] = False
-    session["player_id"] = player_id
-    session["player_name"] = name
-    session["room_id"] = ROOM_ID
-
-    return jsonify({"ok": True, "player_id": player_id, "game_started": False})
+        return jsonify({"ok": True, "player_id": player_id, "game_started": False})
 
 
 @app.route("/lobby/ready", methods=["POST"])
@@ -382,23 +512,24 @@ def lobby_ready():
 
 @app.route("/lobby/state", methods=["GET"])
 def lobby_state_api():
-    load_game_state(ROOM_ID)
-    players = [
-        {"id": player_id, "name": player["name"], "ready": bool(player.get("ready"))}
-        for player_id, player in lobby_state.get("players", {}).items()
-    ]
-    players.sort(key=lambda player: player["name"].lower())
-    all_ready = bool(players) and all(player["ready"] for player in players)
+    with app.app_context():
+        load_game_state(ROOM_ID)
+        players = [
+            {"id": player_id, "name": player["name"], "ready": bool(player.get("ready"))}
+            for player_id, player in lobby_state.get("players", {}).items()
+        ]
+        players.sort(key=lambda player: player["name"].lower())
+        all_ready = bool(players) and all(player["ready"] for player in players)
 
-    return jsonify(
-        {
-            "ok": True,
-            "players": players,
-            "all_ready": all_ready,
-            "game_started": bool(lobby_state.get("game_started")),
-            "has_saved_game": has_saved_game(ROOM_ID),
-        }
-    )
+        return jsonify(
+            {
+                "ok": True,
+                "players": players,
+                "all_ready": all_ready,
+                "game_started": bool(lobby_state.get("game_started")),
+                "has_saved_game": has_saved_game(ROOM_ID),
+            }
+        )
 
 
 @app.route("/lobby/start", methods=["POST"])
@@ -411,23 +542,25 @@ def lobby_start():
 
     names = [player["name"] for _, player in players]
     player_ids = [player_id for player_id, _ in players]
-    create_new_game(ROOM_ID, names, player_ids=player_ids, mode="lobby")
+    with app.app_context():
+        create_new_game(ROOM_ID, names, player_ids=player_ids, mode="lobby")
     return jsonify({"ok": True})
 
 
 @app.route("/lobby/continue", methods=["POST"])
 def lobby_continue():
-    game_state = load_game_state(ROOM_ID)
-    if game_state is None:
-        return redirect(url_for("lobby_page"))
+    with app.app_context():
+        game_state = load_game_state(ROOM_ID)
+        if game_state is None:
+            return redirect(url_for("lobby_page"))
 
-    lobby_state["game_started"] = True
-    game_state["room"]["mode"] = "lobby"
-    game_state["lobby"] = copy.deepcopy(lobby_state)
-    save_game_state(ROOM_ID, game_state)
-    if get_current_player_index(game_state) is None:
-        return redirect(url_for("lobby_page"))
-    return redirect(url_for("spiel"))
+        lobby_state["game_started"] = True
+        game_state["room"]["mode"] = "lobby"
+        game_state["lobby"] = copy.deepcopy(lobby_state)
+        save_game_state(ROOM_ID, game_state)
+        if get_current_player_index(game_state) is None:
+            return redirect(url_for("lobby_page"))
+        return redirect(url_for("spiel"))
 
 
 @app.route("/lobby/new", methods=["POST"])
@@ -436,7 +569,8 @@ def lobby_new():
     lobby_state.clear()
     lobby_state.update(default_lobby_state(ROOM_ID))
     board_store.reset_owners()
-    delete_saved_game_state(ROOM_ID)
+    with app.app_context():
+        delete_saved_game_state(ROOM_ID)
     return redirect(url_for("lobby_page"))
 
 
@@ -451,7 +585,8 @@ def namen():
             raw_name = request.form.get(f"spieler{index}", "").strip()
             players.append(raw_name or f"Spieler {index}")
 
-        create_new_game(ROOM_ID, players)
+        with app.app_context():
+            create_new_game(ROOM_ID, players)
         return redirect(url_for("spiel"))
 
     return render_template("spielernamen.html", anzahl=session["anzahl"])
@@ -463,7 +598,8 @@ def spiel():
     if missing_game:
         return missing_game
 
-    return render_board()
+    with app.app_context():
+        return render_board()
 
 
 @app.route("/api/state", methods=["GET"])
@@ -472,7 +608,8 @@ def api_state():
     if missing_game:
         return json_error("Das Spiel wurde noch nicht gestartet.", 404)
 
-    return jsonify({"ok": True, "state": build_game_payload(get_current_state(), current_player_id=session.get("player_id"))})
+    with app.app_context():
+        return jsonify({"ok": True, "state": build_game_payload(get_current_state(), current_player_id=session.get("player_id"))})
 
 
 @app.route("/zug_wuerfeln", methods=["POST"])
@@ -481,22 +618,23 @@ def zug_wuerfeln():
     if missing_game:
         return json_error("Das Spiel wurde noch nicht gestartet.")
 
-    try:
-        current_state = get_current_state()
-        active_error = require_active_player(current_state)
-        if active_error:
-            return jsonify(
-                {
-                    "ok": False,
-                    "msg": active_error,
-                    "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
-                }
-            ), 403
-        game_state = persist_state(roll_dice(current_state))
-    except ValueError as exc:
-        return json_error(str(exc))
+    with app.app_context():
+        try:
+            current_state = get_current_state()
+            active_error = require_active_player(current_state)
+            if active_error:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "msg": active_error,
+                        "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
+                    }
+                ), 403
+            game_state = persist_state(roll_dice(current_state))
+        except ValueError as exc:
+            return json_error(str(exc))
 
-    return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
+        return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
 
 
 @app.route("/zug_ziehen", methods=["POST"])
@@ -505,22 +643,23 @@ def zug_ziehen():
     if missing_game:
         return json_error("Das Spiel wurde noch nicht gestartet.")
 
-    try:
-        current_state = get_current_state()
-        active_error = require_active_player(current_state)
-        if active_error:
-            return jsonify(
-                {
-                    "ok": False,
-                    "msg": active_error,
-                    "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
-                }
-            ), 403
-        game_state = persist_state(move_player(current_state))
-    except ValueError as exc:
-        return json_error(str(exc))
+    with app.app_context():
+        try:
+            current_state = get_current_state()
+            active_error = require_active_player(current_state)
+            if active_error:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "msg": active_error,
+                        "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
+                    }
+                ), 403
+            game_state = persist_state(move_player(current_state))
+        except ValueError as exc:
+            return json_error(str(exc))
 
-    return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
+        return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
 
 
 @app.route("/feld_aktion", methods=["POST"])
@@ -531,28 +670,29 @@ def feld_aktion():
 
     payload = request.get_json(silent=True) or {}
 
-    try:
-        current_state = get_current_state()
-        active_error = require_active_player(current_state)
-        if active_error:
-            return jsonify(
-                {
-                    "ok": False,
-                    "msg": active_error,
-                    "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
-                }
-            ), 403
-        game_state = persist_state(
-            apply_field_effect(
-                current_state,
-                action=payload.get("aktion", "skip"),
-                field_id=payload.get("feld"),
+    with app.app_context():
+        try:
+            current_state = get_current_state()
+            active_error = require_active_player(current_state)
+            if active_error:
+                return jsonify(
+                    {
+                        "ok": False,
+                        "msg": active_error,
+                        "state": build_game_payload(current_state, current_player_id=session.get("player_id")),
+                    }
+                ), 403
+            game_state = persist_state(
+                apply_field_effect(
+                    current_state,
+                    action=payload.get("aktion", "skip"),
+                    field_id=payload.get("feld"),
+                )
             )
-        )
-    except ValueError as exc:
-        return json_error(str(exc))
+        except ValueError as exc:
+            return json_error(str(exc))
 
-    return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
+        return jsonify({"ok": True, "state": build_game_payload(game_state, current_player_id=session.get("player_id"))})
 
 
 @app.route("/neues_spiel", methods=["POST"])
@@ -561,7 +701,8 @@ def neues_spiel():
     lobby_state.clear()
     lobby_state.update(default_lobby_state(ROOM_ID))
     board_store.reset_owners()
-    delete_saved_game_state(ROOM_ID)
+    with app.app_context():
+        delete_saved_game_state(ROOM_ID)
     return redirect(url_for("index"))
 
 
