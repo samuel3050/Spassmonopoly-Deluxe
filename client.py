@@ -1,6 +1,6 @@
-import webbrowser
-import time
 import socket
+import time
+import webbrowser
 
 
 def get_lan_ip():
@@ -11,19 +11,19 @@ def get_lan_ip():
     except OSError:
         return "127.0.0.1"
 
+
 def join_game():
-    # Öffne den Browser zur Lobby
     url = f"http://{get_lan_ip()}:5000/lobby"
-    print(f"Öffne Browser zur Lobby: {url}")
+    print(f"Oeffne Browser zur Lobby: {url}")
     webbrowser.open(url)
-    print("Browser geöffnet. Gib deinen Namen in der Lobby ein und warte auf andere Spieler!")
-    
-    # Halte das Skript offen
+    print("Browser geoeffnet. Gib deinen Namen in der Lobby ein und warte auf andere Spieler.")
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nVerbindung beendet.")
+
 
 if __name__ == "__main__":
     join_game()

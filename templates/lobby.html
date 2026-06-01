@@ -289,7 +289,7 @@
   </main>
 
   <script>
-    let currentPlayerId = null;
+    let currentPlayerId = {{ current_player_id|tojson }};
     let autoRefreshInterval = null;
 
     function showStatus(message, type = 'info') {
@@ -347,7 +347,7 @@
           return;
         }
 
-        if (data.game_started) {
+        if (data.game_started && currentPlayerId) {
           window.location.href = '/board';
           return;
         }
@@ -371,8 +371,9 @@
           playersList.appendChild(playerEl);
         });
 
-        // Enable start button if all are ready
-        document.getElementById('startBtn').disabled = !data.all_ready || data.players.length < 2;
+        const startBtn = document.getElementById('startBtn');
+        startBtn.disabled = data.game_started || !data.all_ready || data.players.length < 2;
+        startBtn.textContent = data.game_started ? 'Spiel läuft' : 'Spiel starten';
       } catch (err) {
         console.error('Fehler beim Aktualisieren:', err);
       }

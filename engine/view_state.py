@@ -94,12 +94,23 @@ def get_game_highlights(game_state):
     }
 
 
-def build_game_payload(game_state):
+def get_current_player_index(game_state, current_player_id=None):
+    if not current_player_id:
+        return None
+    for index, player in enumerate(game_state.get("players", [])):
+        if player.get("id") == current_player_id:
+            return index
+    return None
+
+
+def build_game_payload(game_state, current_player_id=None):
     fields = game_state["board"]["fields"]
     players = game_state.get("players", [])
     pending_action = game_state.get("pending_action")
     dice = game_state.get("dice", {})
     active_index = game_state.get("active_player_index", 0)
+    current_player_index = get_current_player_index(game_state, current_player_id)
+    lobby_mode = game_state.get("room", {}).get("mode") == "lobby"
 
     popup_field = None
     popup_player = None
@@ -119,6 +130,8 @@ def build_game_payload(game_state):
         "appName": game_state.get("app_name", "Spassmonopoly Deluxe"),
         "spieler": [player["name"] for player in players],
         "aktiver": active_index,
+        "currentPlayerIndex": current_player_index,
+        "canAct": True if not lobby_mode else current_player_index == active_index,
         "activePlayerName": get_active_player_name(game_state),
         "felder": fields,
         "positionen": [player.get("position", 0) for player in players],
