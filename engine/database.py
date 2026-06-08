@@ -11,6 +11,11 @@ db = SQLAlchemy()
 
 def create_database_url():
     """Build SQLAlchemy database URL from environment variables."""
+    # SQLite keeps the local game setup self-contained; MySQL remains optional.
+    db_engine = os.getenv("DB_ENGINE", "sqlite").lower()
+    if db_engine == "sqlite":
+        db_file = os.getenv("DB_FILE", "spassmonopoly.db")
+        return f"sqlite:///{db_file}"
     db_user = os.getenv("DB_USER", "root")
     db_password = os.getenv("DB_PASSWORD", "")
     db_host = os.getenv("DB_HOST", "localhost")
