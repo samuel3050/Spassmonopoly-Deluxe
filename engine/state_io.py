@@ -36,8 +36,8 @@ def load_game_state(room_id=DEFAULT_ROOM_ID):
         Game state dictionary or None if not found
     """
     try:
-        state = GameSaveService.get_game_state(room_id)
-        return state if state else None
+        game_save = GameSaveService.load_save_by_name(room_id)
+        return game_save.get_game_state() if game_save else None
     except Exception:
         return None
 

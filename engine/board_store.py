@@ -18,6 +18,7 @@ DB_CONFIG = {
     "host": os.getenv("DB_HOST", "localhost"),
     "user": os.getenv("DB_USER", "root"),
     "password": os.getenv("DB_PASSWORD", ""),
+    "port": int(os.getenv("DB_PORT", "3306")),
     "database": os.getenv("DB_NAME", "spassmonopoly"),
 }
 
@@ -31,6 +32,7 @@ class BoardStore:
 
     def __init__(self):
         self._memory_fields = copy_fields(DEFAULT_FIELDS)
+        self._use_mysql = os.getenv("DB_ENGINE", "sqlite").lower() == "mysql"
         self._db_status_checked = False
         self._db_available = False
 
@@ -39,7 +41,7 @@ class BoardStore:
             return self._db_available
 
         self._db_status_checked = True
-        if mysql is None:
+        if not self._use_mysql or mysql is None:
             self._db_available = False
             return False
 

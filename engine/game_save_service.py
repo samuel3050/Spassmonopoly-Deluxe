@@ -73,15 +73,15 @@ class GameSaveService:
 
     @staticmethod
     def get_game_state(save_id: str) -> Optional[Dict[str, Any]]:
-        """Get the game state for a save.
+        """Get the game state for a save by ID or save name.
 
         Args:
-            save_id: ID of the save
+            save_id: ID or name of the save
 
         Returns:
             Game state dictionary or None
         """
-        game_save = GameSaveService.load_save(save_id)
+        game_save = GameSaveService.load_save(save_id) or GameSaveService.load_save_by_name(save_id)
         if not game_save:
             return None
         return game_save.get_game_state()

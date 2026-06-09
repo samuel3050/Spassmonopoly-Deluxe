@@ -3,6 +3,13 @@ import os
 from uuid import uuid4
 
 try:
+    from dotenv import load_dotenv
+except ImportError:
+    pass
+else:
+    load_dotenv()
+
+try:
     from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 except ImportError as exc:
     raise SystemExit(
@@ -338,11 +345,13 @@ def api_load_save(save_id):
                 return json_error("Save not found", 404)
 
             game_state = game_save.get_game_state()
+            save_game_state(ROOM_ID, game_state)
             session.clear()
             return jsonify({
                 "ok": True,
                 "message": f"Loaded '{game_save.name}'",
                 "save_id": save_id,
+                "redirect_url": url_for("spiel"),
             })
     except Exception as e:
         return json_error(f"Error loading save: {str(e)}", 500)
@@ -528,12 +537,16 @@ def lobby_state_api():
                 "all_ready": all_ready,
                 "game_started": bool(lobby_state.get("game_started")),
                 "has_saved_game": has_saved_game(ROOM_ID),
+                "redirect_url": url_for("spiel"),
             }
         )
 
 
 @app.route("/lobby/start", methods=["POST"])
 def lobby_start():
+    if lobby_state.get("game_started") and has_saved_game(ROOM_ID):
+        return jsonify({"ok": True, "redirect_url": url_for("spiel")})
+
     players = list(lobby_state.get("players", {}).items())
     if len(players) < 2:
         return json_error("Mindestens 2 Spieler erforderlich")
@@ -544,7 +557,7 @@ def lobby_start():
     player_ids = [player_id for player_id, _ in players]
     with app.app_context():
         create_new_game(ROOM_ID, names, player_ids=player_ids, mode="lobby")
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "redirect_url": url_for("spiel")})
 
 
 @app.route("/lobby/continue", methods=["POST"])
@@ -697,13 +710,18 @@ def feld_aktion():
 
 @app.route("/neues_spiel", methods=["POST"])
 def neues_spiel():
+    previous_state = get_current_state()
+    return_to_lobby = (
+        bool(session.get("player_id"))
+        or (previous_state or {}).get("room", {}).get("mode") == "lobby"
+    )
     session.clear()
     lobby_state.clear()
     lobby_state.update(default_lobby_state(ROOM_ID))
     board_store.reset_owners()
     with app.app_context():
         delete_saved_game_state(ROOM_ID)
-    return redirect(url_for("index"))
+    return redirect(url_for("lobby_page" if return_to_lobby else "index"))
 
 
 if __name__ == "__main__":

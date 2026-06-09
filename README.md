@@ -1,50 +1,36 @@
-# Spaßmonopoly Deluxe
+# Spassmonopoly Deluxe
 
-Spaßmonopoly Deluxe ist ein browserbasiertes Brettspiel mit moderner Oberfläche,
-klarer Zugführung, Besitzsystem und responsivem Spielbrett.
+Browserbasiertes Brettspiel mit Lobby, responsivem Spielbrett, Besitzsystem,
+Wuerfelablauf und gespeicherten Spielstaenden.
 
 ## Starten
 
-1. In den Projektordner wechseln:
-   `cd Spassmonopoly-Deluxe`
-2. Abhängigkeiten installieren:
-   `pip install -r requirements.txt`
-3. Server starten:
-   `python game.py`
+1. Abhaengigkeiten installieren:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Server starten:
+   ```bash
+   python game.py
+   ```
+3. Im Browser oeffnen:
+   ```text
+   http://127.0.0.1:5000
+   ```
 
-Danach ist das Spiel unter `http://127.0.0.1:5000` erreichbar.
+## Struktur
 
-## Architektur
+- `game.py`: Flask-App, Routen und Spielablauf.
+- `server.py`: Server-Start fuer LAN/Deployment mit `HOST` und `PORT`.
+- `client.py`: Lobby im Browser ueber die LAN-Adresse oeffnen.
+- `board_data.py`: integrierte Spielfeld-Daten.
+- `engine/`: Spiellogik, Speicherlogik, Datenmodelle und UI-State.
+- `templates/`: HTML-Ansichten fuer Start, Lobby und Spielbrett.
+- `static/`: CSS, JavaScript und Wuerfelbilder.
+- `regelblatt.md`: kurze Spielregeln.
 
-Das Projekt ist in eine reine Engine und eine schlanke Flask-Oberflaeche getrennt:
+## Konfiguration
 
-- `engine/game_engine.py`: Spiellogik ohne Flask-, HTML- oder Session-Abhaengigkeit.
-- `engine/state_io.py`: Laden und Speichern des zentralen JSON-Game-States.
-- `engine/view_state.py`: abgeleiteter UI-Snapshot aus dem kanonischen State.
-- `engine/board_store.py`: Spielfeld-Konfiguration aus MySQL oder `board_data.py`.
-- `game.py`: Flask-Routen; sie laden State, rufen Engine-Funktionen auf und speichern State.
-- `data/current_game_state.json`: laufender Server-State der lokalen Partie.
-
-Der kanonische State enthaelt Spieler, aktiven Spieler, Reihenfolge, Spielfeld,
-Wuerfelstatus, offene Feldaktionen, Spielstatus und Verlauf. Browser-Aktionen wie
-Wuerfeln, Ziehen und Feldaktion veraendern ausschliesslich diesen JSON-State ueber
-die Engine.
-
-## Highlights
-
-- Professionelle Start-, Lobby- und Spielansicht mit klarer UX.
-- Sauberer Zugablauf: würfeln, bewegen, Feld prüfen.
-- Fallback auf integrierte Spielfeld-Daten, falls keine MySQL-Datenbank erreichbar ist.
-- Besitzübersicht, Live-Spielverlauf und Rundenstatistiken in Echtzeit.
-- Einheitliche Sprache mit vollständigen Umlauten in der Oberfläche.
-
-## Optionale Datenbank-Konfiguration
-
-Wenn du MySQL verwenden willst, kannst du diese Umgebungsvariablen setzen:
-
-- `DB_HOST`
-- `DB_USER`
-- `DB_PASSWORD`
-- `DB_NAME`
-- `FLASK_SECRET_KEY`
-
+Die App kann ueber Umgebungsvariablen konfiguriert werden. Eine Vorlage liegt in
+`.env.example`. Lokale Dateien wie `.env`, virtuelle Umgebungen, Caches und
+Spielstand-Datenbanken werden per `.gitignore` aus dem Repo herausgehalten.

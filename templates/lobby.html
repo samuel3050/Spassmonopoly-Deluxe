@@ -291,6 +291,7 @@
   <script>
     let currentPlayerId = {{ current_player_id|tojson }};
     let autoRefreshInterval = null;
+    let autoStartRequested = false;
 
     function showStatus(message, type = 'info') {
       const msgEl = document.getElementById('statusMessage');
@@ -319,6 +320,10 @@
         const data = await response.json();
         if (data.ok) {
           currentPlayerId = data.player_id;
+          if (data.game_started) {
+            window.location.href = data.redirect_url || '/board';
+            return;
+          }
           document.getElementById('joinSection').style.display = 'none';
           showStatus(`Willkommen ${name}! Bitte warte, bis alle Spieler bereit sind.`, 'success');
           updateLobby();
@@ -348,7 +353,7 @@
         }
 
         if (data.game_started && currentPlayerId) {
-          window.location.href = '/board';
+          window.location.href = data.redirect_url || '/board';
           return;
         }
 
@@ -373,7 +378,14 @@
 
         const startBtn = document.getElementById('startBtn');
         startBtn.disabled = data.game_started || !data.all_ready || data.players.length < 2;
-        startBtn.textContent = data.game_started ? 'Spiel läuft' : 'Spiel starten';
+        startBtn.textContent = data.game_started
+          ? 'Spiel läuft'
+          : (data.all_ready && data.players.length >= 2 ? 'Spiel startet...' : 'Spiel starten');
+
+        if (!data.game_started && data.all_ready && data.players.length >= 2 && currentPlayerId && !autoStartRequested) {
+          autoStartRequested = true;
+          startGame();
+        }
       } catch (err) {
         console.error('Fehler beim Aktualisieren:', err);
       }
@@ -397,6 +409,10 @@
     }
 
     async function startGame() {
+      const startBtn = document.getElementById('startBtn');
+      startBtn.disabled = true;
+      startBtn.textContent = 'Spiel startet...';
+
       try {
         const response = await fetch('/lobby/start', {
           method: 'POST'
@@ -406,12 +422,14 @@
         if (data.ok) {
           showStatus('Spiel wird gestartet...', 'success');
           setTimeout(() => {
-            window.location.href = '/board';
+            window.location.href = data.redirect_url || '/board';
           }, 500);
         } else {
+          autoStartRequested = false;
           showStatus(data.msg || 'Fehler beim Starten', 'warning');
         }
       } catch (err) {
+        autoStartRequested = false;
         showStatus('Verbindungsfehler', 'warning');
       }
     }
