@@ -511,6 +511,16 @@ function showPendingField() {
   renderBoardInsights();
 }
 
+function openExitModal() {
+  refs.exitModal.classList.add("open");
+  refs.exitModal.setAttribute("aria-hidden", "false");
+}
+
+function closeExitModal() {
+  refs.exitModal.classList.remove("open");
+  refs.exitModal.setAttribute("aria-hidden", "true");
+}
+
 async function handleRoll() {
   if (busy) return;
   setBusy(true);
@@ -566,8 +576,41 @@ async function handleFieldAction(action, fieldId) {
   }
 }
 
+async function saveGame() {
+  if (busy) return;
+  setBusy(true);
+  try {
+    const data = await postJson("/api/save-current");
+    setState(data.state, { toast: data.message || "Spielstand gespeichert." });
+    lastSignature = getStateSignature(data.state);
+  } catch (error) {
+    if (error.state) {
+      setState(error.state);
+      lastSignature = getStateSignature(error.state);
+    }
+    showToast(error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function exitGame(mode) {
+  if (busy) return;
+  setBusy(true);
+  try {
+    const data = await postJson("/api/exit-game", { mode });
+    window.location.href = data.redirect_url || "/";
+  } catch (error) {
+    showToast(error.message);
+    closeExitModal();
+  } finally {
+    setBusy(false);
+  }
+}
+
 function cacheRefs() {
   refs.modal = document.getElementById("fieldModal");
+  refs.exitModal = document.getElementById("exitModal");
   refs.modalContent = document.getElementById("fieldModalContent");
   refs.boardGrid = document.getElementById("boardGrid");
   refs.scoreList = document.getElementById("scoreList");
@@ -580,6 +623,8 @@ function cacheRefs() {
   refs.turnSummary = document.getElementById("turnSummary");
   refs.quickStats = document.getElementById("quickStats");
   refs.currentFieldButton = document.getElementById("currentFieldButton");
+  refs.saveGameButton = document.getElementById("saveGameButton");
+  refs.exitGameButton = document.getElementById("exitGameButton");
   refs.playerCountChip = document.getElementById("playerCountChip");
   refs.ownershipCountChip = document.getElementById("ownershipCountChip");
   refs.centerTitle = document.getElementById("centerTitle");
@@ -608,8 +653,13 @@ function cacheRefs() {
 
 function bindEvents() {
   refs.currentFieldButton.addEventListener("click", showPendingField);
+  refs.saveGameButton.addEventListener("click", saveGame);
+  refs.exitGameButton.addEventListener("click", openExitModal);
   refs.modal.addEventListener("click", (event) => {
     if (event.target === refs.modal) closeFieldModal();
+  });
+  refs.exitModal.addEventListener("click", (event) => {
+    if (event.target === refs.exitModal) closeExitModal();
   });
   refs.drawerScrim.addEventListener("click", () => closeDrawer());
   refs.eventSearch.addEventListener("input", (event) => {
@@ -624,6 +674,7 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeFieldModal();
+      closeExitModal();
       closeDrawer();
     }
   });
@@ -647,8 +698,11 @@ document.addEventListener("DOMContentLoaded", bootBoard);
 
 window.closeDrawer = closeDrawer;
 window.closeFieldModal = closeFieldModal;
+window.closeExitModal = closeExitModal;
 window.showFieldInfo = showFieldInfo;
 window.showPendingField = showPendingField;
 window.handleFieldAction = handleFieldAction;
 window.handleRoll = handleRoll;
 window.handleMove = handleMove;
+window.saveGame = saveGame;
+window.exitGame = exitGame;

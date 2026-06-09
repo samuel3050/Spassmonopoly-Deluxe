@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base, db
@@ -16,6 +16,9 @@ class GameSave(Base):
     """Represents a saved game state."""
 
     __tablename__ = "games"
+    __table_args__ = (
+        Index("ix_games_status_updated", "updated_at"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     name = db.Column(String(255), nullable=False, unique=True, index=True)
@@ -38,6 +41,10 @@ class GameSave(Base):
 
     def to_dict(self):
         """Convert to dictionary for API responses."""
+        state = self.get_game_state()
+        players = state.get("players", [])
+        game = state.get("game", {})
+        active_index = int(state.get("active_player_index", 0) or 0) if players else None
         return {
             "id": self.id,
             "name": self.name,
@@ -45,6 +52,12 @@ class GameSave(Base):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "version": self.version,
+            "player_count": len(players),
+            "round": game.get("round", 1),
+            "turn_number": game.get("turn_number", 1),
+            "status": game.get("status", "running"),
+            "phase": game.get("phase", "roll"),
+            "active_player": players[active_index]["name"] if active_index is not None and active_index < len(players) else None,
         }
 
     def get_game_state(self):
@@ -64,6 +77,10 @@ class Player(Base):
     """Represents a player in a saved game."""
 
     __tablename__ = "players"
+    __table_args__ = (
+        UniqueConstraint("game_save_id", "player_index", name="uq_players_game_index"),
+        UniqueConstraint("game_save_id", "player_id", name="uq_players_game_player_id"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
@@ -96,6 +113,11 @@ class Field(Base):
     """Represents a field on the board in a saved game."""
 
     __tablename__ = "fields"
+    __table_args__ = (
+        UniqueConstraint("game_save_id", "field_index", name="uq_fields_game_index"),
+        UniqueConstraint("game_save_id", "field_id", name="uq_fields_game_field_id"),
+        Index("ix_fields_owner", "owner_player_id"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
@@ -134,6 +156,10 @@ class GameEvent(Base):
     """Represents an event that occurred in a game."""
 
     __tablename__ = "logs"
+    __table_args__ = (
+        Index("ix_logs_game_created", "game_save_id", "created_at"),
+        Index("ix_logs_game_type", "game_save_id", "event_type"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
@@ -174,7 +200,10 @@ class GameEvent(Base):
 class GameStateSnapshot(Base):
     """Stores durable game-state snapshots separate from the game metadata row."""
 
-    __tablename__ = "game_state"
+    __tablename__ = "game_states"
+    __table_args__ = (
+        Index("ix_game_states_game_created", "game_save_id", "created_at"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
@@ -198,10 +227,15 @@ class Card(Base):
     """Represents a card definition or drawn card persisted for a game."""
 
     __tablename__ = "cards"
+    __table_args__ = (
+        Index("ix_cards_game_type", "game_save_id", "card_type"),
+        Index("ix_cards_game_pile", "game_save_id", "pile"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=True, index=True)
     card_type = db.Column(String(80), nullable=False, default="gemeinschaft", index=True)
+    pile = db.Column(String(40), nullable=False, default="deck", index=True)
     title = db.Column(String(255), nullable=False)
     description = db.Column(Text, nullable=False, default="")
     effect_json = db.Column(Text, nullable=False, default="{}")
@@ -224,6 +258,9 @@ class Setting(Base):
     """Stores per-game release settings and feature flags."""
 
     __tablename__ = "settings"
+    __table_args__ = (
+        UniqueConstraint("game_save_id", "key", name="uq_settings_game_key"),
+    )
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=True, index=True)

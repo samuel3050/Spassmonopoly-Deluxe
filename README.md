@@ -109,13 +109,32 @@ Release-relevante Tabellen:
 - `games`: Metadaten und aktueller kanonischer Spielstand
 - `players`: query-freundliche Spielerprojektion
 - `fields`: query-freundliche Feldprojektion
-- `game_state`: persistierte State-Snapshots
+- `game_states`: persistierte State-Snapshots
 - `logs`: strukturierte Spielereignisse
 - `cards`: persistierte Kartendefinitionen
 - `settings`: Spiel- und Feature-Einstellungen
 
 Legacy-Saves aus der alten Tabelle `game_saves` werden beim Start automatisch in
 `games` uebernommen.
+
+## Speicherablauf
+
+Single Source of Truth ist der Flask-Backend-State. Das Frontend sendet nur
+Aktionen wie Wuerfeln, Bewegen, Feldaktion, Speichern oder Beenden.
+
+Manuelles Speichern:
+
+1. `/api/save-current` laedt den aktuellen Backend-State.
+2. Der State wird validiert: Spieler, Board, Positionen, Wuerfel, offene Aktion,
+   Karten und Settings.
+3. SQLAlchemy schreibt `games`, `players`, `fields`, `game_states`, `cards`,
+   `logs` und `settings` in einer DB-Transaktion.
+4. Bei Erfolg wird committed und die UI zeigt eine Erfolgsmeldung.
+5. Bei Fehler wird gerollbackt und die UI erhaelt eine Fehlermeldung.
+
+Autosave laeuft nach Wuerfelwurf, Bewegung, Feldaktion, Kartenereignis und
+Spielerwechsel, weil diese Aktionen nur dann erfolgreich antworten, wenn der
+neue State in der Datenbank persistiert wurde.
 
 ## Entwicklung
 

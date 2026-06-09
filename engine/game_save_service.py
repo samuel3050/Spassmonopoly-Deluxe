@@ -11,8 +11,64 @@ class GameSaveService:
     """Service layer for game save operations with transaction support."""
 
     @staticmethod
+    def validate_game_state(game_state: Dict[str, Any]) -> None:
+        if not isinstance(game_state, dict):
+            raise ValueError("Spielstand muss ein Dictionary sein")
+
+        players = game_state.get("players")
+        fields = game_state.get("board", {}).get("fields")
+        if not isinstance(players, list) or len(players) < 2:
+            raise ValueError("Spielstand braucht mindestens zwei Spieler")
+        if not isinstance(fields, list) or not fields:
+            raise ValueError("Spielstand braucht ein Spielfeld")
+
+        active_index = int(game_state.get("active_player_index", 0) or 0)
+        if active_index < 0 or active_index >= len(players):
+            raise ValueError("Aktiver Spieler ist ungueltig")
+
+        for index, player in enumerate(players):
+            if not player.get("id") or not player.get("name"):
+                raise ValueError(f"Spieler {index + 1} ist unvollstaendig")
+            position = int(player.get("position", 0) or 0)
+            if position < 0 or position >= len(fields):
+                raise ValueError(f"Spielerposition von {player.get('name')} ist ungueltig")
+
+        field_ids = set()
+        for index, field in enumerate(fields):
+            if "feld_id" not in field:
+                raise ValueError(f"Feld {index + 1} hat keine feld_id")
+            field_id = int(field["feld_id"])
+            if field_id in field_ids:
+                raise ValueError(f"Feld-ID {field_id} ist doppelt")
+            field_ids.add(field_id)
+
+        dice = game_state.get("dice", {})
+        for key in ("current_roll", "last_roll"):
+            roll = dice.get(key)
+            if roll is not None and (not isinstance(roll, list) or len(roll) != 2 or any(int(value) < 1 or int(value) > 6 for value in roll)):
+                raise ValueError(f"Wuerfelwert {key} ist ungueltig")
+
+        pending = game_state.get("pending_action")
+        if pending:
+            pending_index = int(pending.get("field_index", -1))
+            pending_player = int(pending.get("player_index", -1))
+            if pending_index < 0 or pending_index >= len(fields):
+                raise ValueError("Offene Feldaktion verweist auf ein ungueltiges Feld")
+            if pending_player < 0 or pending_player >= len(players):
+                raise ValueError("Offene Feldaktion verweist auf einen ungueltigen Spieler")
+
+        cards = game_state.get("cards", {})
+        if cards and not isinstance(cards, dict):
+            raise ValueError("Kartenstatus ist ungueltig")
+
+    @staticmethod
     def _sync_projection(game_save: GameSave, game_state: Dict[str, Any]) -> None:
         """Keep query-friendly tables in sync with the canonical state JSON."""
+        if game_save.id:
+            for model in (Player, Field, GameEvent, GameStateSnapshot, Card, Setting):
+                db.session.query(model).filter_by(game_save_id=game_save.id).delete(synchronize_session=False)
+            db.session.flush()
+
         game_save.players.clear()
         game_save.fields.clear()
         game_save.events.clear()
@@ -56,15 +112,38 @@ class GameSaveService:
         snapshot.set_state(game_state)
         game_save.snapshots.append(snapshot)
 
-        for card_type, cards in (game_state.get("cards") or {}).items():
-            for card_data in cards:
+        for card_type, cards_state in (game_state.get("cards") or {}).items():
+            if isinstance(cards_state, dict):
+                card_groups = (
+                    ("deck", cards_state.get("deck") or []),
+                    ("drawn", cards_state.get("drawn") or []),
+                    ("discard", cards_state.get("discard") or []),
+                )
+            else:
+                card_groups = (("deck", cards_state or []),)
+
+            for pile_name, cards in card_groups:
+                for card_data in cards:
+                    card = Card(
+                        card_type=str(card_data.get("type", card_type)),
+                        title=str(card_data.get("title", "Karte")),
+                        description=str(card_data.get("message", "")),
+                        pile=str(pile_name),
+                        is_active=pile_name == "deck",
+                    )
+                    card.set_effect(card_data.get("effect", {}))
+                    game_save.cards.append(card)
+
+            last_drawn = cards_state.get("last_drawn") if isinstance(cards_state, dict) else None
+            if last_drawn:
                 card = Card(
-                    card_type=str(card_data.get("type", card_type)),
-                    title=str(card_data.get("title", "Karte")),
-                    description=str(card_data.get("message", "")),
+                    card_type=str(last_drawn.get("type", card_type)),
+                    title=str(last_drawn.get("title", "Karte")),
+                    description=str(last_drawn.get("message", "")),
+                    pile="last_drawn",
                     is_active=True,
                 )
-                card.set_effect(card_data.get("effect", {}))
+                card.set_effect(last_drawn.get("effect", {}))
                 game_save.cards.append(card)
 
         for key, value in (game_state.get("settings") or {}).items():
@@ -87,6 +166,7 @@ class GameSaveService:
             SQLAlchemyError: On database error
         """
         try:
+            GameSaveService.validate_game_state(game_state)
             existing = db.session.query(GameSave).filter_by(name=name).first()
             if existing:
                 raise ValueError(f"Save name '{name}' already exists")
@@ -160,6 +240,7 @@ class GameSaveService:
             SQLAlchemyError: On database error
         """
         try:
+            GameSaveService.validate_game_state(game_state)
             game_save = GameSaveService.load_save(save_id)
             if not game_save:
                 return None
@@ -276,6 +357,7 @@ class GameSaveService:
                 description=f"Copy of {source_save.name}",
             )
             source_state = source_save.get_game_state()
+            GameSaveService.validate_game_state(source_state)
             new_save.set_game_state(source_state)
             GameSaveService._sync_projection(new_save, source_state)
 

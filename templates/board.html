@@ -22,6 +22,8 @@
         <button id="ownershipPanelButton" type="button" class="secondary-btn">Besitz</button>
         <button id="logPanelButton" type="button" class="secondary-btn">Log</button>
         <button id="helpPanelButton" type="button" class="secondary-btn">Hilfe</button>
+        <button id="saveGameButton" type="button" class="secondary-btn">Speichern</button>
+        <button id="exitGameButton" type="button" class="secondary-btn">Beenden</button>
         <form method="post" action="{{ url_for('neues_spiel') }}">
           <button type="submit" class="secondary-btn">Neue Runde</button>
         </form>
@@ -152,6 +154,20 @@
     <div class="modal-card">
       <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeFieldModal()">x</button>
       <div id="fieldModalContent"></div>
+    </div>
+  </div>
+
+  <div id="exitModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-compact">
+      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeExitModal()">x</button>
+      <div class="hero-badge">Spiel beenden</div>
+      <h2>Spiel speichern bevor beendet wird?</h2>
+      <p class="modal-intro">Waehle, ob der aktuelle Zustand vor der Rueckkehr ins Hauptmenue gespeichert werden soll.</p>
+      <div class="modal-actions modal-actions-stack">
+        <button type="button" class="primary-btn" onclick="exitGame('save')">Speichern und beenden</button>
+        <button type="button" class="secondary-btn" onclick="exitGame('discard')">Ohne Speichern beenden</button>
+        <button type="button" class="secondary-btn" onclick="closeExitModal()">Abbrechen</button>
+      </div>
     </div>
   </div>
 

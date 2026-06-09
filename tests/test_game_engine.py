@@ -31,6 +31,15 @@ FIELDS = [
         "farbe": "Rot",
         "besitzer": None,
     },
+    {
+        "feld_id": 4,
+        "name": "Gemeinschaft",
+        "typ": "Gemeinschaft",
+        "kaufpreis": None,
+        "miete": None,
+        "farbe": "Blau",
+        "besitzer": None,
+    },
 ]
 
 
@@ -62,9 +71,23 @@ class GameEngineFlowTests(unittest.TestCase):
         self.assertEqual(state["event_log"][-2]["type"], "field_effect")
         self.assertEqual(state["event_log"][-1]["type"], "turn_change")
 
+    def test_community_card_moves_between_deck_drawn_and_discard(self):
+        state = init_game({"players": ["Samuel", "Lukas"], "fields": FIELDS})
+        before_count = len(state["cards"]["gemeinschaft"]["deck"])
+
+        state = roll_dice(state, dice=[1, 2])
+        state = move_player(state)
+        state = apply_field_effect(state, action="skip")
+
+        community = state["cards"]["gemeinschaft"]
+        self.assertEqual(len(community["deck"]), before_count - 1)
+        self.assertEqual(len(community["drawn"]), 1)
+        self.assertEqual(len(community["discard"]), 1)
+        self.assertEqual(state["event_log"][-2]["type"], "card_event")
+
     def test_property_purchase_updates_owner_and_points(self):
         state = init_game({"players": ["Samuel", "Lukas"], "fields": FIELDS})
-        state = roll_dice(state, dice=[1, 3])
+        state = roll_dice(state, dice=[1, 4])
         state = move_player(state)
         state = apply_field_effect(state, action="kaufen")
 

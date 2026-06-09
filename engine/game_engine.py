@@ -182,16 +182,20 @@ def normalize_event_log(entries):
 
 def default_cards():
     return {
-        "gemeinschaft": [
-            {
-                "id": f"community-{index + 1}",
-                "type": "gemeinschaft",
-                "title": card["title"],
-                "message": card["message"],
-                "effect": {key: value for key, value in card.items() if key.startswith("delta_")},
-            }
-            for index, card in enumerate(GEMEINSCHAFT_EFFECTS)
-        ],
+        "gemeinschaft": {
+            "deck": [
+                {
+                    "id": f"community-{index + 1}",
+                    "type": "gemeinschaft",
+                    "title": card["title"],
+                    "message": card["message"],
+                    "effect": {key: value for key, value in card.items() if key.startswith("delta_")},
+                }
+                for index, card in enumerate(GEMEINSCHAFT_EFFECTS)
+            ],
+            "drawn": [],
+            "discard": [],
+        },
     }
 
 
@@ -205,6 +209,21 @@ def default_settings():
 def ensure_state_defaults(state):
     next_state = copy.deepcopy(state)
     next_state.setdefault("cards", default_cards())
+    community_cards = next_state["cards"].get("gemeinschaft")
+    if isinstance(community_cards, list):
+        next_state["cards"]["gemeinschaft"] = {
+            "deck": community_cards,
+            "drawn": [],
+            "discard": [],
+        }
+    else:
+        defaults = default_cards()["gemeinschaft"]
+        community_cards = community_cards or {}
+        next_state["cards"]["gemeinschaft"] = {
+            "deck": list(community_cards.get("deck") or defaults["deck"]),
+            "drawn": list(community_cards.get("drawn") or []),
+            "discard": list(community_cards.get("discard") or []),
+        }
     next_state.setdefault("settings", default_settings())
     next_state["event_log"] = normalize_event_log(next_state.get("event_log", []))
     return next_state
@@ -389,15 +408,23 @@ def apply_non_property_effect(state, field, active_index):
         return f"{player['name']} landet auf Los und darf 1 Aktionspunkt abziehen."
 
     if field_type == "gemeinschaft":
-        cards = state.get("cards", {}).get("gemeinschaft") or [
-            {
-                "title": card["title"],
-                "message": card["message"],
-                "effect": {key: value for key, value in card.items() if key.startswith("delta_")},
-            }
-            for card in GEMEINSCHAFT_EFFECTS
-        ]
-        card = random.choice(cards)
+        community = state.setdefault("cards", default_cards()).setdefault("gemeinschaft", default_cards()["gemeinschaft"])
+        if isinstance(community, list):
+            community = {"deck": community, "drawn": [], "discard": []}
+            state["cards"]["gemeinschaft"] = community
+        deck = community.setdefault("deck", [])
+        discard = community.setdefault("discard", [])
+        drawn = community.setdefault("drawn", [])
+        if not deck:
+            deck.extend(discard)
+            discard.clear()
+        if not deck:
+            deck.extend(default_cards()["gemeinschaft"]["deck"])
+        card_index = random.randrange(len(deck))
+        card = deck.pop(card_index)
+        drawn.append(card)
+        discard.append(card)
+        community["last_drawn"] = card
         effect = card.get("effect", card)
         if "delta_self" in effect:
             clamp_points(player, effect["delta_self"])

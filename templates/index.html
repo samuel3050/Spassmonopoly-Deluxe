@@ -51,7 +51,62 @@
           <p>Wuerfe, Bewegungen, Karten, Strafen und Fehler werden mit Zeitstempel festgehalten.</p>
         </article>
       </section>
+
+      <section class="save-manager" aria-labelledby="saveManagerTitle">
+        <div class="save-manager-heading">
+          <div>
+            <div class="hero-badge">Spielstaende</div>
+            <h2 id="saveManagerTitle">Gespeicherte Spiele</h2>
+          </div>
+          <span class="status-chip">{{ saves|length }} vorhanden</span>
+        </div>
+
+        {% if saves %}
+        <div class="save-list">
+          {% for save in saves %}
+          <article class="save-card">
+            <div>
+              <strong>{{ save.name }}</strong>
+              <p>{{ save.player_count }} Spieler &middot; Runde {{ save.round }} &middot; {{ save.status }}</p>
+            </div>
+            <div class="save-meta">
+              <span>Erstellt: {{ save.created_at[:10] }}</span>
+              <span>Geaendert: {{ save.updated_at[:10] }}</span>
+              <span>Aktiv: {{ save.active_player or "n/a" }}</span>
+            </div>
+            <button type="button" class="primary-btn" onclick="loadSave('{{ save.id }}')">Laden</button>
+          </article>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-note">Noch keine Spielstaende vorhanden.</p>
+        {% endif %}
+      </section>
     </section>
   </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    async function loadSave(saveId) {
+      const toast = document.getElementById("toast");
+      try {
+        const response = await fetch(`/api/save/${saveId}/load`, { method: "POST" });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.msg || "Spielstand konnte nicht geladen werden.");
+        }
+        toast.textContent = data.message || "Spielstand geladen.";
+        toast.classList.add("show");
+        window.setTimeout(() => {
+          window.location.href = data.redirect_url || "/board";
+        }, 250);
+      } catch (error) {
+        toast.textContent = error.message;
+        toast.classList.add("show");
+        window.setTimeout(() => toast.classList.remove("show"), 3200);
+      }
+    }
+  </script>
 </body>
 </html>

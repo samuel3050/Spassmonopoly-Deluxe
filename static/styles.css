@@ -247,6 +247,59 @@ select:focus {
   margin-top: 24px;
 }
 
+.save-manager {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(23, 32, 45, 0.12);
+}
+
+.save-manager-heading,
+.save-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.save-manager-heading h2 {
+  margin: 8px 0 0;
+}
+
+.save-list {
+  display: grid;
+  gap: 10px;
+}
+
+.save-card {
+  grid-template-columns: minmax(0, 1.3fr) minmax(180px, 0.8fr) auto;
+  padding: 14px;
+  border: 1px solid rgba(23, 32, 45, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--shadow-soft);
+}
+
+.save-card strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-card p,
+.save-meta {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.save-meta {
+  display: grid;
+  gap: 3px;
+}
+
 .hero-highlight-card,
 .guide-item,
 .insight-card,
@@ -933,6 +986,10 @@ select:focus {
   animation: modalIn 0.18s ease both;
 }
 
+.modal-card-compact {
+  width: min(100%, 460px);
+}
+
 .modal-close {
   position: absolute;
   top: 12px;
@@ -977,6 +1034,10 @@ select:focus {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 18px;
+}
+
+.modal-actions-stack {
+  display: grid;
 }
 
 .toast {
@@ -1101,6 +1162,12 @@ select:focus {
 
   .hero-highlights {
     grid-template-columns: 1fr;
+  }
+
+  .save-manager-heading,
+  .save-card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .form-actions,

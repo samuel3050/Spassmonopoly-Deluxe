@@ -250,6 +250,14 @@ def save_game_state(room_id=ROOM_ID, game_state=None):
     return game_state
 
 
+def save_current_state_with_event(message, event_type="manual_save"):
+    current_state = get_current_state()
+    if current_state is None:
+        raise ValueError("Kein aktiver Spielstand vorhanden.")
+    next_state = push_event(current_state, message, event_type=event_type, severity="success")
+    return persist_state(next_state)
+
+
 def persist_error_event(game_state, message):
     if not game_state:
         return None
@@ -395,7 +403,10 @@ def api_load_save(save_id):
                 return json_error("Spielstand nicht gefunden", 404)
 
             game_state = game_save.get_game_state()
-            save_game_state(ROOM_ID, game_state)
+            normalized = normalize_game_state(game_state, ROOM_ID)
+            if normalized is None:
+                return json_error("Spielstand ist nicht spielbar", 422)
+            save_game_state(ROOM_ID, normalized)
             session.clear()
             return jsonify({
                 "ok": True,
@@ -406,6 +417,49 @@ def api_load_save(save_id):
     except Exception as e:
         app.logger.exception("Save load API failed")
         return json_error(f"Spielstand konnte nicht geladen werden: {str(e)}", 500)
+
+
+@app.route("/api/save-current", methods=["POST"])
+def api_save_current():
+    missing_game = redirect_if_game_missing()
+    if missing_game:
+        return json_error("Das Spiel wurde noch nicht gestartet.", 404)
+
+    with state_lock, app.app_context():
+        try:
+            game_state = save_current_state_with_event("Spielstand manuell gespeichert.")
+            return jsonify(
+                {
+                    "ok": True,
+                    "message": "Spielstand gespeichert.",
+                    "state": build_game_payload(game_state, current_player_id=session.get("player_id")),
+                }
+            )
+        except ValueError as exc:
+            return json_error(str(exc), 400)
+        except Exception as exc:
+            app.logger.exception("Manual save failed")
+            return json_error(f"Spielstand konnte nicht gespeichert werden: {str(exc)}", 500)
+
+
+@app.route("/api/exit-game", methods=["POST"])
+def api_exit_game():
+    payload = request.get_json(silent=True) or {}
+    mode = payload.get("mode")
+    if mode not in {"save", "discard"}:
+        return json_error("Ungueltige Beenden-Aktion.", 400)
+
+    with state_lock, app.app_context():
+        try:
+            if mode == "save" and has_saved_game(ROOM_ID):
+                save_current_state_with_event("Spiel gespeichert und beendet.", event_type="game_exit")
+            session.clear()
+            lobby_state.clear()
+            lobby_state.update(default_lobby_state(ROOM_ID))
+            return jsonify({"ok": True, "redirect_url": url_for("index")})
+        except Exception as exc:
+            app.logger.exception("Exit game failed")
+            return json_error(f"Spiel konnte nicht beendet werden: {str(exc)}", 500)
 
 
 @app.route("/api/save/<save_id>/rename", methods=["POST"])
@@ -491,7 +545,8 @@ def index():
         return redirect(url_for("namen"))
 
     with app.app_context():
-        return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID))
+        saves = [save.to_dict() for save in GameSaveService.list_saves()]
+        return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID), saves=saves)
 
 
 @app.route("/continue", methods=["POST"])

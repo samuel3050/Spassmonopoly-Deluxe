@@ -33,7 +33,7 @@ class FlaskGameFlowTests(unittest.TestCase):
         with self.game_module.app.app_context():
             tables = set(inspect(self.database_module.db.engine).get_table_names())
 
-        self.assertTrue({"games", "players", "game_state", "logs", "cards", "settings"}.issubset(tables))
+        self.assertTrue({"games", "players", "game_states", "logs", "cards", "settings"}.issubset(tables))
 
     def test_local_game_http_flow_and_save_list(self):
         response = self.client.post("/", data={"anzahl": "2"})
@@ -79,6 +79,32 @@ class FlaskGameFlowTests(unittest.TestCase):
         saves_response = self.client.get("/api/saves").get_json()
         self.assertTrue(saves_response["ok"])
         self.assertGreaterEqual(len(saves_response["saves"]), 1)
+
+        manual_save = self.client.post("/api/save-current").get_json()
+        self.assertTrue(manual_save["ok"])
+        self.assertEqual(manual_save["state"]["phase"], "roll")
+        self.assertIn("gespeichert", manual_save["message"])
+
+        save_id = self.client.get("/api/saves").get_json()["saves"][0]["id"]
+        loaded = self.client.post(f"/api/save/{save_id}/load").get_json()
+        self.assertTrue(loaded["ok"])
+
+        restored = self.client.get("/api/state").get_json()
+        self.assertTrue(restored["ok"])
+        self.assertEqual(restored["state"]["phase"], "roll")
+        self.assertEqual(restored["state"]["aktiver"], manual_save["state"]["aktiver"])
+
+        exited = self.client.post("/api/exit-game", json={"mode": "save"}).get_json()
+        self.assertTrue(exited["ok"])
+        self.assertEqual(exited["redirect_url"], "/")
+
+    def test_invalid_save_state_is_rejected_before_commit(self):
+        with self.game_module.app.app_context():
+            with self.assertRaises(ValueError):
+                self.game_module.GameSaveService.create_save(
+                    "broken-save",
+                    {"players": [{"id": "p1", "name": "Only one"}], "board": {"fields": []}},
+                )
 
 
 if __name__ == "__main__":
