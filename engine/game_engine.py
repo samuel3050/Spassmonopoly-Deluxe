@@ -36,11 +36,11 @@ SPECIAL_FIELD_RULES = {
 }
 
 GEMEINSCHAFT_EFFECTS = [
-    {"delta_self": -2, "message": "Glueck gehabt! Du darfst dir 2 Aktionspunkte abziehen."},
-    {"delta_self": 2, "message": "Pech gehabt! Du bekommst 2 Aktionspunkte dazu."},
-    {"delta_all": 1, "message": "Eine Runde fuer alle! Jeder bekommt 1 Aktionspunkt."},
-    {"delta_all": -1, "message": "Gute Stimmung! Allen wird 1 Aktionspunkt erlassen."},
-    {"message": "Nichts passiert. Atmet tief durch."},
+    {"title": "Glueck gehabt", "delta_self": -2, "message": "Du darfst dir 2 Aktionspunkte abziehen."},
+    {"title": "Pech gehabt", "delta_self": 2, "message": "Du bekommst 2 Aktionspunkte dazu."},
+    {"title": "Eine Runde fuer alle", "delta_all": 1, "message": "Jeder bekommt 1 Aktionspunkt."},
+    {"title": "Gute Stimmung", "delta_all": -1, "message": "Allen wird 1 Aktionspunkt erlassen."},
+    {"title": "Durchatmen", "message": "Nichts passiert. Atmet tief durch."},
 ]
 
 DISPLAY_REPLACEMENTS = {
@@ -180,6 +180,36 @@ def normalize_event_log(entries):
     return [normalize_event(entry) for entry in list(entries or [])][-80:]
 
 
+def default_cards():
+    return {
+        "gemeinschaft": [
+            {
+                "id": f"community-{index + 1}",
+                "type": "gemeinschaft",
+                "title": card["title"],
+                "message": card["message"],
+                "effect": {key: value for key, value in card.items() if key.startswith("delta_")},
+            }
+            for index, card in enumerate(GEMEINSCHAFT_EFFECTS)
+        ],
+    }
+
+
+def default_settings():
+    return {
+        "max_rounds": 0,
+        "finish_when_all_properties_owned": True,
+    }
+
+
+def ensure_state_defaults(state):
+    next_state = copy.deepcopy(state)
+    next_state.setdefault("cards", default_cards())
+    next_state.setdefault("settings", default_settings())
+    next_state["event_log"] = normalize_event_log(next_state.get("event_log", []))
+    return next_state
+
+
 def init_game(config):
     player_names = config.get("players") or config.get("player_names") or []
     if not player_names:
@@ -225,6 +255,8 @@ def init_game(config):
         "pending_action": None,
         "last_event": None,
         "event_log": [],
+        "cards": default_cards(),
+        "settings": default_settings(),
     }
     return push_event(
         state,
@@ -357,13 +389,22 @@ def apply_non_property_effect(state, field, active_index):
         return f"{player['name']} landet auf Los und darf 1 Aktionspunkt abziehen."
 
     if field_type == "gemeinschaft":
-        effect = random.choice(GEMEINSCHAFT_EFFECTS)
+        cards = state.get("cards", {}).get("gemeinschaft") or [
+            {
+                "title": card["title"],
+                "message": card["message"],
+                "effect": {key: value for key, value in card.items() if key.startswith("delta_")},
+            }
+            for card in GEMEINSCHAFT_EFFECTS
+        ]
+        card = random.choice(cards)
+        effect = card.get("effect", card)
         if "delta_self" in effect:
             clamp_points(player, effect["delta_self"])
         if "delta_all" in effect:
             for target in state["players"]:
                 clamp_points(target, effect["delta_all"])
-        return f"{player['name']} zieht eine Gemeinschaftskarte: {effect['message']}"
+        return f"{player['name']} zieht eine Gemeinschaftskarte: {card.get('title', 'Ereignis')} - {card.get('message', '')}"
 
     if field_type == "steuer":
         amount = parse_number(field.get("miete"))
@@ -464,7 +505,13 @@ def maybe_finish_game(game_state):
     state = copy.deepcopy(game_state)
     fields = state.get("board", {}).get("fields", [])
     buyable_fields = [field for field in fields if field.get("ist_kaufbar")]
-    if not buyable_fields or any(not field.get("besitzer") for field in buyable_fields):
+    settings = state.get("settings", default_settings())
+    max_rounds = int(settings.get("max_rounds", 0) or 0)
+    finish_by_ownership = bool(settings.get("finish_when_all_properties_owned", True))
+    all_owned = bool(buyable_fields) and all(field.get("besitzer") for field in buyable_fields)
+    round_limit_reached = max_rounds > 0 and int(state.get("game", {}).get("round", 1) or 1) > max_rounds
+
+    if not ((finish_by_ownership and all_owned) or round_limit_reached):
         return state
 
     owner_counts = {}
@@ -484,9 +531,10 @@ def maybe_finish_game(game_state):
     winner_count = owner_counts.get(winner.get("id"), owner_counts.get(winner.get("name"), 0))
     state.setdefault("game", {})["status"] = "finished"
     state["game"]["phase"] = "finished"
+    reason = "alle kaufbaren Felder vergeben" if all_owned else f"Rundenlimit {max_rounds} erreicht"
     return push_event(
         state,
-        f"Gewinner: {winner['name']} gewinnt die Runde mit {winner_count} gesicherten Feldern.",
+        f"Gewinner: {winner['name']} gewinnt die Runde mit {winner_count} gesicherten Feldern ({reason}).",
         event_type="winner",
         severity="success",
         player_id=winner["id"],

@@ -1,16 +1,74 @@
-import json
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .database import db
-from .models import Field, GameEvent, GameSave, Player
+from .models import Card, Field, GameEvent, GameSave, GameStateSnapshot, Player, Setting
 
 
 class GameSaveService:
     """Service layer for game save operations with transaction support."""
+
+    @staticmethod
+    def _sync_projection(game_save: GameSave, game_state: Dict[str, Any]) -> None:
+        """Keep query-friendly tables in sync with the canonical state JSON."""
+        game_save.players.clear()
+        game_save.fields.clear()
+        game_save.events.clear()
+        game_save.snapshots.clear()
+        game_save.cards.clear()
+        game_save.settings.clear()
+
+        for index, player_data in enumerate(game_state.get("players", [])):
+            game_save.players.append(
+                Player(
+                    player_index=index,
+                    player_id=str(player_data.get("id", f"player-{index + 1}")),
+                    name=str(player_data.get("name", f"Spieler {index + 1}")),
+                    position=int(player_data.get("position", 0) or 0),
+                    action_points=int(player_data.get("action_points", 0) or 0),
+                    total_steps=int(player_data.get("total_steps", 0) or 0),
+                    status=str(player_data.get("status", "active")),
+                )
+            )
+
+        for index, field_data in enumerate(game_state.get("board", {}).get("fields", [])):
+            field = Field(
+                field_index=index,
+                field_id=str(field_data.get("feld_id", index + 1)),
+                owner_player_id=field_data.get("owner_player_id"),
+            )
+            field.set_properties(field_data)
+            game_save.fields.append(field)
+
+        for event in game_state.get("event_log", [])[-80:]:
+            if isinstance(event, dict):
+                log = GameEvent(
+                    event_type=str(event.get("type", "info")),
+                    severity=str(event.get("severity", "info")),
+                    message=str(event.get("message", "")),
+                )
+                log.set_data(event)
+                game_save.events.append(log)
+
+        snapshot = GameStateSnapshot(version=int(game_state.get("schema_version", 1) or 1))
+        snapshot.set_state(game_state)
+        game_save.snapshots.append(snapshot)
+
+        for card_type, cards in (game_state.get("cards") or {}).items():
+            for card_data in cards:
+                card = Card(
+                    card_type=str(card_data.get("type", card_type)),
+                    title=str(card_data.get("title", "Karte")),
+                    description=str(card_data.get("message", "")),
+                    is_active=True,
+                )
+                card.set_effect(card_data.get("effect", {}))
+                game_save.cards.append(card)
+
+        for key, value in (game_state.get("settings") or {}).items():
+            game_save.settings.append(Setting(key=str(key), value=str(value)))
 
     @staticmethod
     def create_save(name: str, game_state: Dict[str, Any], description: str = "") -> GameSave:
@@ -35,6 +93,7 @@ class GameSaveService:
 
             game_save = GameSave(name=name, description=description)
             game_save.set_game_state(game_state)
+            GameSaveService._sync_projection(game_save, game_state)
 
             db.session.add(game_save)
             db.session.commit()
@@ -106,6 +165,7 @@ class GameSaveService:
                 return None
 
             game_save.set_game_state(game_state)
+            GameSaveService._sync_projection(game_save, game_state)
             db.session.commit()
             return game_save
 
@@ -215,7 +275,9 @@ class GameSaveService:
                 name=new_name,
                 description=f"Copy of {source_save.name}",
             )
-            new_save.set_game_state(source_save.get_game_state())
+            source_state = source_save.get_game_state()
+            new_save.set_game_state(source_state)
+            GameSaveService._sync_projection(new_save, source_state)
 
             db.session.add(new_save)
             db.session.commit()
@@ -248,7 +310,12 @@ class GameSaveService:
             if not game_save:
                 return None
 
-            event = GameEvent(game_save_id=save_id, event_type=event_type)
+            event = GameEvent(
+                game_save_id=save_id,
+                event_type=event_type,
+                severity=str(event_data.get("severity", "info")),
+                message=str(event_data.get("message", "")),
+            )
             event.set_data(event_data)
 
             db.session.add(event)

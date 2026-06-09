@@ -96,7 +96,7 @@
     </div>
   </aside>
 
-  <aside id="logPanel" class="side-drawer" aria-hidden="true">
+  <aside id="logPanel" class="side-drawer side-drawer-log" aria-hidden="true">
     <div class="side-drawer-card">
       <div class="panel-heading">
         <h2>Spielverlauf</h2>
@@ -104,6 +104,18 @@
       </div>
       <div class="drawer-meta">
         <span class="status-chip">Live</span>
+      </div>
+      <div class="log-tools">
+        <input id="eventSearch" type="search" placeholder="Log durchsuchen" autocomplete="off">
+        <select id="eventFilter" aria-label="Log-Kategorie filtern">
+          <option value="all">Alle</option>
+          <option value="dice_roll">Wuerfe</option>
+          <option value="movement">Bewegung</option>
+          <option value="card_event">Karten</option>
+          <option value="penalty">Strafen</option>
+          <option value="winner">Gewinner</option>
+          <option value="error">Fehler</option>
+        </select>
       </div>
       <div id="eventLog" class="event-log"></div>
     </div>

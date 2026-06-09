@@ -12,4 +12,4 @@ saves/
 data/current_game_state.json
 tempCodeRunnerFile.*
 *.code-workspace
-flask-dev*.log
+flask-*.log

@@ -2,8 +2,8 @@ import os
 from contextlib import contextmanager
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 db = SQLAlchemy()
@@ -63,3 +63,32 @@ def create_tables(app):
     with app.app_context():
         db.create_all()
         Base.metadata.create_all(db.engine)
+        run_automatic_migrations()
+
+
+def run_automatic_migrations():
+    """Run small idempotent migrations without requiring an external migration tool."""
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+    if "game_saves" not in tables or "games" not in tables:
+        return
+
+    with db.engine.begin() as connection:
+        games_count = connection.execute(text("SELECT COUNT(*) FROM games")).scalar() or 0
+        if games_count:
+            return
+
+        legacy_columns = {column["name"] for column in inspector.get_columns("game_saves")}
+        required = {"id", "name", "description", "created_at", "updated_at", "version", "game_state_json"}
+        if not required.issubset(legacy_columns):
+            return
+
+        connection.execute(
+            text(
+                """
+                INSERT INTO games (id, name, description, created_at, updated_at, version, game_state_json)
+                SELECT id, name, description, created_at, updated_at, version, game_state_json
+                FROM game_saves
+                """
+            )
+        )

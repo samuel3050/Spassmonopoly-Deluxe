@@ -1,9 +1,11 @@
 const BOARD_COORDS = [
-  [0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0],
-  [10, 1], [10, 2], [10, 3], [10, 4], [10, 5], [10, 6], [10, 7], [10, 8], [10, 9], [10, 10],
-  [9, 10], [8, 10], [7, 10], [6, 10], [5, 10], [4, 10], [3, 10], [2, 10], [1, 10], [0, 10],
-  [0, 9], [0, 8], [0, 7], [0, 6], [0, 5], [0, 4], [0, 3], [0, 2], [0, 1],
+  [0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [11, 0], [12, 0], [13, 0],
+  [13, 1], [13, 2], [13, 3], [13, 4], [13, 5], [13, 6],
+  [13, 7], [12, 7], [11, 7], [10, 7], [9, 7], [8, 7], [7, 7], [6, 7], [5, 7], [4, 7], [3, 7], [2, 7], [1, 7], [0, 7],
+  [0, 6], [0, 5], [0, 4], [0, 3], [0, 2], [0, 1],
 ];
+const BOARD_COLUMNS = 14;
+const BOARD_ROWS = 8;
 
 const DRAWER_KEYS = ["players", "ownership", "log", "help"];
 const refs = {};
@@ -17,6 +19,8 @@ let diceTimer = null;
 let pollTimer = null;
 let lastSignature = "";
 let previousPositions = [...(state.positionen || [])];
+let eventSearchTerm = "";
+let eventTypeFilter = "all";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -193,8 +197,8 @@ function renderBoardGrid() {
   const coordToField = new Map(BOARD_COORDS.map((coord, index) => [coord.join(","), index]));
   const tiles = [];
 
-  for (let y = 0; y < 11; y += 1) {
-    for (let x = 0; x < 11; x += 1) {
+  for (let y = 0; y < BOARD_ROWS; y += 1) {
+    for (let x = 0; x < BOARD_COLUMNS; x += 1) {
       const fieldIndex = coordToField.get(`${x},${y}`);
       if (fieldIndex === undefined) {
         tiles.push('<div class="board-center-gap" aria-hidden="true"></div>');
@@ -249,8 +253,15 @@ function renderOwnership() {
 }
 
 function renderEventLog() {
-  refs.eventLog.innerHTML = state.eventLog?.length
-    ? state.eventLog.map(eventMarkup).join("")
+  const entries = (state.eventLog || []).filter((entry) => {
+    const event = typeof entry === "string" ? { message: entry, type: "legacy" } : entry;
+    const matchesType = eventTypeFilter === "all" || event.type === eventTypeFilter || event.severity === eventTypeFilter;
+    const haystack = `${event.type || ""} ${event.severity || ""} ${event.message || ""}`.toLowerCase();
+    return matchesType && haystack.includes(eventSearchTerm);
+  });
+
+  refs.eventLog.innerHTML = entries.length
+    ? entries.map(eventMarkup).join("")
     : '<p class="empty-note">Der Spielverlauf erscheint hier nach dem Start.</p>';
   window.requestAnimationFrame(() => {
     refs.eventLog.scrollTop = refs.eventLog.scrollHeight;
@@ -562,6 +573,8 @@ function cacheRefs() {
   refs.scoreList = document.getElementById("scoreList");
   refs.ownershipList = document.getElementById("ownershipList");
   refs.eventLog = document.getElementById("eventLog");
+  refs.eventSearch = document.getElementById("eventSearch");
+  refs.eventFilter = document.getElementById("eventFilter");
   refs.commandActions = document.getElementById("commandActions");
   refs.phaseChip = document.getElementById("phaseChip");
   refs.turnSummary = document.getElementById("turnSummary");
@@ -599,6 +612,14 @@ function bindEvents() {
     if (event.target === refs.modal) closeFieldModal();
   });
   refs.drawerScrim.addEventListener("click", () => closeDrawer());
+  refs.eventSearch.addEventListener("input", (event) => {
+    eventSearchTerm = event.target.value.trim().toLowerCase();
+    renderEventLog();
+  });
+  refs.eventFilter.addEventListener("change", (event) => {
+    eventTypeFilter = event.target.value;
+    renderEventLog();
+  });
   DRAWER_KEYS.forEach((key) => refs.drawerButtons[key].addEventListener("click", () => toggleDrawer(key)));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {

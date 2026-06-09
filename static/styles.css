@@ -43,7 +43,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -79,7 +80,8 @@ h3 {
   font-size: 1rem;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 48px;
   padding: 12px 14px;
@@ -89,7 +91,8 @@ input {
   color: var(--ink);
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: 3px solid rgba(243, 200, 75, 0.48);
   outline-offset: 1px;
 }
@@ -370,9 +373,9 @@ input:focus {
 
 .board-frame {
   position: relative;
-  width: min(100%, calc(100dvh - 142px), 1180px);
+  width: min(100%, calc((100dvh - 142px) * 1.72), 1320px);
   max-width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 16 / 9;
   min-height: 0;
   margin: auto;
   padding: clamp(5px, 0.75vw, 10px);
@@ -387,8 +390,8 @@ input:focus {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-columns: repeat(11, minmax(0, 1fr));
-  grid-template-rows: repeat(11, minmax(0, 1fr));
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  grid-template-rows: repeat(8, minmax(0, 1fr));
   gap: clamp(2px, 0.42vw, 5px);
 }
 
@@ -504,7 +507,7 @@ input:focus {
 
 .board-center-card {
   position: absolute;
-  inset: calc((100% / 11) + clamp(7px, 0.85vw, 14px));
+  inset: calc((100% / 8) + clamp(7px, 0.85vw, 14px)) calc((100% / 14) + clamp(7px, 0.85vw, 14px));
   display: grid;
   align-content: center;
   justify-items: center;
@@ -701,6 +704,10 @@ input:focus {
   border-right: none;
 }
 
+.side-drawer-log .side-drawer-card {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
 .drawer-close {
   min-width: 40px;
   width: 40px;
@@ -724,6 +731,19 @@ input:focus {
 .drawer-meta {
   display: flex;
   justify-content: flex-start;
+}
+
+.log-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  gap: 8px;
+}
+
+.log-tools input,
+.log-tools select {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 0.84rem;
 }
 
 .drawer-scrim {
@@ -1015,7 +1035,7 @@ input:focus {
   }
 
   .board-frame {
-    width: min(100%, calc(100dvh - 126px));
+    width: min(100%, calc((100dvh - 126px) * 1.72));
   }
 }
 
@@ -1046,7 +1066,7 @@ input:focus {
   }
 
   .board-frame {
-    width: min(100%, calc(100dvh - 174px));
+    width: min(100%, calc((100dvh - 174px) * 1.72));
   }
 
   .field-owner,
@@ -1129,7 +1149,7 @@ input:focus {
   }
 
   .board-frame {
-    width: min(100%, calc(100dvh - 156px));
+    width: min(100%, calc((100dvh - 156px) * 1.72));
     padding: 4px;
   }
 
@@ -1186,7 +1206,7 @@ input:focus {
 
 @media (min-width: 1600px) {
   .board-frame {
-    width: min(100%, calc(100dvh - 150px), 1320px);
+    width: min(100%, calc((100dvh - 150px) * 1.72), 1480px);
   }
 }
 

@@ -25,6 +25,7 @@ from engine.game_engine import (
     apply_field_effect,
     clean_display_text,
     ensure_field_shape,
+    ensure_state_defaults,
     init_game,
     move_player,
     normalize_event_log,
@@ -192,7 +193,7 @@ def normalize_legacy_server_save(snapshot, room_id=ROOM_ID):
         lobby = infer_lobby_state(state, room_id)
     lobby["game_started"] = True
     state["lobby"] = lobby
-    return state
+    return ensure_state_defaults(state)
 
 
 def normalize_game_state(raw_state, room_id=ROOM_ID):
@@ -202,8 +203,8 @@ def normalize_game_state(raw_state, room_id=ROOM_ID):
         state["room"].setdefault("id", room_id)
         state["room"].setdefault("mode", "local")
         state.setdefault("lobby", infer_lobby_state(state, room_id))
+        state = ensure_state_defaults(state)
         state["board"]["fields"] = ensure_field_shape(state["board"]["fields"])
-        state["event_log"] = normalize_event_log(state.get("event_log", []))
         if state["event_log"]:
             state["last_event_entry"] = state["event_log"][-1]
             state["last_event"] = state["event_log"][-1]["message"]
@@ -363,7 +364,8 @@ def api_list_saves():
                 "saves": [save.to_dict() for save in saves],
             })
     except Exception as e:
-        return json_error(f"Error listing saves: {str(e)}", 500)
+        app.logger.exception("Save list API failed")
+        return json_error(f"Spielstaende konnten nicht geladen werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>", methods=["GET"])
@@ -373,13 +375,14 @@ def api_get_save(save_id):
         with app.app_context():
             game_save = GameSaveService.load_save(save_id)
             if not game_save:
-                return json_error("Save not found", 404)
+                return json_error("Spielstand nicht gefunden", 404)
             return jsonify({
                 "ok": True,
                 "save": game_save.to_dict(),
             })
     except Exception as e:
-        return json_error(f"Error loading save: {str(e)}", 500)
+        app.logger.exception("Save detail API failed")
+        return json_error(f"Spielstand konnte nicht geladen werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>/load", methods=["POST"])
@@ -389,19 +392,20 @@ def api_load_save(save_id):
         with app.app_context():
             game_save = GameSaveService.load_save(save_id)
             if not game_save:
-                return json_error("Save not found", 404)
+                return json_error("Spielstand nicht gefunden", 404)
 
             game_state = game_save.get_game_state()
             save_game_state(ROOM_ID, game_state)
             session.clear()
             return jsonify({
                 "ok": True,
-                "message": f"Loaded '{game_save.name}'",
+                "message": f"'{game_save.name}' geladen",
                 "save_id": save_id,
                 "redirect_url": url_for("spiel"),
             })
     except Exception as e:
-        return json_error(f"Error loading save: {str(e)}", 500)
+        app.logger.exception("Save load API failed")
+        return json_error(f"Spielstand konnte nicht geladen werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>/rename", methods=["POST"])
@@ -412,22 +416,23 @@ def api_rename_save(save_id):
         new_name = data.get("name", "").strip()
 
         if not new_name:
-            return json_error("Name is required", 400)
+            return json_error("Name erforderlich", 400)
 
         with app.app_context():
             game_save = GameSaveService.rename_save(save_id, new_name)
             if not game_save:
-                return json_error("Save not found", 404)
+                return json_error("Spielstand nicht gefunden", 404)
 
             return jsonify({
                 "ok": True,
-                "message": f"Renamed to '{new_name}'",
+                "message": f"In '{new_name}' umbenannt",
                 "save": game_save.to_dict(),
             })
     except ValueError as e:
         return json_error(str(e), 400)
     except Exception as e:
-        return json_error(f"Error renaming save: {str(e)}", 500)
+        app.logger.exception("Save rename API failed")
+        return json_error(f"Spielstand konnte nicht umbenannt werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>/delete", methods=["POST"])
@@ -437,14 +442,15 @@ def api_delete_save(save_id):
         with app.app_context():
             success = GameSaveService.delete_save(save_id)
             if not success:
-                return json_error("Save not found", 404)
+                return json_error("Spielstand nicht gefunden", 404)
 
             return jsonify({
                 "ok": True,
-                "message": "Save deleted",
+                "message": "Spielstand geloescht",
             })
     except Exception as e:
-        return json_error(f"Error deleting save: {str(e)}", 500)
+        app.logger.exception("Save delete API failed")
+        return json_error(f"Spielstand konnte nicht geloescht werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>/duplicate", methods=["POST"])
@@ -455,22 +461,23 @@ def api_duplicate_save(save_id):
         new_name = data.get("name", "").strip()
 
         if not new_name:
-            return json_error("Name is required", 400)
+            return json_error("Name erforderlich", 400)
 
         with app.app_context():
             game_save = GameSaveService.duplicate_save(save_id, new_name)
             if not game_save:
-                return json_error("Save not found", 404)
+                return json_error("Spielstand nicht gefunden", 404)
 
             return jsonify({
                 "ok": True,
-                "message": f"Duplicated to '{new_name}'",
+                "message": f"Nach '{new_name}' dupliziert",
                 "save": game_save.to_dict(),
             })
     except ValueError as e:
         return json_error(str(e), 400)
     except Exception as e:
-        return json_error(f"Error duplicating save: {str(e)}", 500)
+        app.logger.exception("Save duplicate API failed")
+        return json_error(f"Spielstand konnte nicht dupliziert werden: {str(e)}", 500)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -798,4 +805,5 @@ def neues_spiel():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
+    app.run(debug=debug)

@@ -1,23 +1,27 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .database import Base, db
 
 
+def utc_now():
+    return datetime.now(UTC)
+
+
 class GameSave(Base):
     """Represents a saved game state."""
 
-    __tablename__ = "game_saves"
+    __tablename__ = "games"
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     name = db.Column(String(255), nullable=False, unique=True, index=True)
     description = db.Column(Text, nullable=True)
-    created_at = db.Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = db.Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(DateTime, nullable=False, default=utc_now, index=True)
+    updated_at = db.Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
     version = db.Column(Integer, default=1)
 
     game_state_json = db.Column(Text, nullable=False, default="{}")
@@ -25,6 +29,9 @@ class GameSave(Base):
     players = relationship("Player", back_populates="game_save", cascade="all, delete-orphan")
     fields = relationship("Field", back_populates="game_save", cascade="all, delete-orphan")
     events = relationship("GameEvent", back_populates="game_save", cascade="all, delete-orphan")
+    snapshots = relationship("GameStateSnapshot", back_populates="game_save", cascade="all, delete-orphan")
+    cards = relationship("Card", back_populates="game_save", cascade="all, delete-orphan")
+    settings = relationship("Setting", back_populates="game_save", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<GameSave {self.name}>"
@@ -50,7 +57,7 @@ class GameSave(Base):
     def set_game_state(self, state):
         """Store the game state as JSON."""
         self.game_state_json = json.dumps(state, ensure_ascii=False)
-        self.updated_at = datetime.utcnow()
+        self.updated_at = utc_now()
 
 
 class Player(Base):
@@ -59,7 +66,7 @@ class Player(Base):
     __tablename__ = "players"
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    game_save_id = db.Column(String(36), ForeignKey("game_saves.id"), nullable=False, index=True)
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
     player_index = db.Column(Integer, nullable=False)
     player_id = db.Column(String(36), nullable=False)
     name = db.Column(String(255), nullable=False)
@@ -91,7 +98,7 @@ class Field(Base):
     __tablename__ = "fields"
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    game_save_id = db.Column(String(36), ForeignKey("game_saves.id"), nullable=False, index=True)
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
     field_index = db.Column(Integer, nullable=False)
     field_id = db.Column(String(255), nullable=False)
     owner_player_id = db.Column(String(36), nullable=True)
@@ -126,13 +133,15 @@ class Field(Base):
 class GameEvent(Base):
     """Represents an event that occurred in a game."""
 
-    __tablename__ = "game_events"
+    __tablename__ = "logs"
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    game_save_id = db.Column(String(36), ForeignKey("game_saves.id"), nullable=False, index=True)
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
     event_type = db.Column(String(255), nullable=False, index=True)
+    severity = db.Column(String(50), nullable=False, default="info", index=True)
+    message = db.Column(Text, nullable=False, default="")
     data_json = db.Column(Text, nullable=False, default="{}")
-    created_at = db.Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    created_at = db.Column(DateTime, nullable=False, default=utc_now, index=True)
 
     game_save = relationship("GameSave", back_populates="events")
 
@@ -155,6 +164,71 @@ class GameEvent(Base):
         return {
             "id": self.id,
             "event_type": self.event_type,
+            "severity": self.severity,
+            "message": self.message,
             "data": self.get_data(),
             "created_at": self.created_at.isoformat(),
         }
+
+
+class GameStateSnapshot(Base):
+    """Stores durable game-state snapshots separate from the game metadata row."""
+
+    __tablename__ = "game_state"
+
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=False, index=True)
+    version = db.Column(Integer, nullable=False, default=1)
+    state_json = db.Column(Text, nullable=False, default="{}")
+    created_at = db.Column(DateTime, nullable=False, default=utc_now, index=True)
+
+    game_save = relationship("GameSave", back_populates="snapshots")
+
+    def get_state(self):
+        try:
+            return json.loads(self.state_json) if self.state_json else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_state(self, state):
+        self.state_json = json.dumps(state, ensure_ascii=False)
+
+
+class Card(Base):
+    """Represents a card definition or drawn card persisted for a game."""
+
+    __tablename__ = "cards"
+
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=True, index=True)
+    card_type = db.Column(String(80), nullable=False, default="gemeinschaft", index=True)
+    title = db.Column(String(255), nullable=False)
+    description = db.Column(Text, nullable=False, default="")
+    effect_json = db.Column(Text, nullable=False, default="{}")
+    is_active = db.Column(Boolean, nullable=False, default=True)
+    created_at = db.Column(DateTime, nullable=False, default=utc_now, index=True)
+
+    game_save = relationship("GameSave", back_populates="cards")
+
+    def get_effect(self):
+        try:
+            return json.loads(self.effect_json) if self.effect_json else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_effect(self, effect):
+        self.effect_json = json.dumps(effect, ensure_ascii=False)
+
+
+class Setting(Base):
+    """Stores per-game release settings and feature flags."""
+
+    __tablename__ = "settings"
+
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    game_save_id = db.Column(String(36), ForeignKey("games.id"), nullable=True, index=True)
+    key = db.Column(String(120), nullable=False, index=True)
+    value = db.Column(Text, nullable=False, default="")
+    updated_at = db.Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+
+    game_save = relationship("GameSave", back_populates="settings")
