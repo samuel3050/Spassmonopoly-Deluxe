@@ -171,6 +171,21 @@
     </div>
   </div>
 
+  <div id="saveModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-compact">
+      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeSaveModal()">x</button>
+      <div class="hero-badge">Spielstand</div>
+      <h2>Spielstand benennen</h2>
+      <p class="modal-intro">Vergib einen Namen, der spaeter im Save Manager wiedererkennbar ist.</p>
+      <label class="field-label" for="manualSaveName">Name</label>
+      <input id="manualSaveName" type="text" maxlength="64" placeholder="Freitag Abend Runde" autocomplete="off">
+      <div class="modal-actions">
+        <button type="button" class="primary-btn" onclick="submitSaveGame()">Speichern</button>
+        <button type="button" class="secondary-btn" onclick="closeSaveModal()">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     window.gameData = {{ game_state|tojson }};
   </script>

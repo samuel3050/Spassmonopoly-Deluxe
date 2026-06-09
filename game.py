@@ -45,6 +45,8 @@ from engine.view_state import build_game_payload
 
 APP_NAME = "Spassmonopoly Deluxe"
 ROOM_ID = os.getenv("GAME_ROOM_ID", DEFAULT_ROOM_ID)
+MIN_LOBBY_PLAYERS = 2
+MAX_LOBBY_PLAYERS = 8
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
@@ -352,6 +354,30 @@ def parse_player_count(raw_value, default=4):
     return max(2, min(8, value))
 
 
+def clean_save_name(raw_value, fallback=None):
+    name = clean_display_text(str(raw_value or "").strip())
+    name = " ".join(name.split())
+    if not name and fallback:
+        name = fallback
+    if not name:
+        raise ValueError("Bitte gib einen Namen fuer den Spielstand ein.")
+    if len(name) < 2:
+        raise ValueError("Der Name muss mindestens 2 Zeichen lang sein.")
+    if len(name) > 64:
+        raise ValueError("Der Name darf maximal 64 Zeichen lang sein.")
+    return name
+
+
+def clean_lobby_name(raw_value):
+    name = clean_display_text(str(raw_value or "").strip())
+    name = " ".join(name.split())
+    if len(name) < 2:
+        raise ValueError("Der Name muss mindestens 2 Zeichen lang sein.")
+    if len(name) > 24:
+        raise ValueError("Der Name darf maximal 24 Zeichen lang sein.")
+    return name
+
+
 def render_board():
     with app.app_context():
         game_state = get_current_state()
@@ -427,11 +453,22 @@ def api_save_current():
 
     with state_lock, app.app_context():
         try:
+            payload = request.get_json(silent=True) or {}
+            requested_name = payload.get("name")
+            save_name = clean_save_name(requested_name) if requested_name else None
             game_state = save_current_state_with_event("Spielstand manuell gespeichert.")
+            named_save = None
+            if save_name:
+                existing = GameSaveService.load_save_by_name(save_name)
+                if existing:
+                    named_save = GameSaveService.update_save(existing.id, game_state)
+                else:
+                    named_save = GameSaveService.create_save(save_name, game_state, description="Manueller Spielstand")
             return jsonify(
                 {
                     "ok": True,
-                    "message": "Spielstand gespeichert.",
+                    "message": f"Als '{save_name}' gespeichert." if save_name else "Spielstand gespeichert.",
+                    "save": named_save.to_dict() if named_save else None,
                     "state": build_game_payload(game_state, current_player_id=session.get("player_id")),
                 }
             )
@@ -467,10 +504,7 @@ def api_rename_save(save_id):
     """Rename a saved game."""
     try:
         data = request.get_json(silent=True) or {}
-        new_name = data.get("name", "").strip()
-
-        if not new_name:
-            return json_error("Name erforderlich", 400)
+        new_name = clean_save_name(data.get("name", ""))
 
         with app.app_context():
             game_save = GameSaveService.rename_save(save_id, new_name)
@@ -512,10 +546,7 @@ def api_duplicate_save(save_id):
     """Duplicate a saved game."""
     try:
         data = request.get_json(silent=True) or {}
-        new_name = data.get("name", "").strip()
-
-        if not new_name:
-            return json_error("Name erforderlich", 400)
+        new_name = clean_save_name(data.get("name", ""))
 
         with app.app_context():
             game_save = GameSaveService.duplicate_save(save_id, new_name)
@@ -534,6 +565,23 @@ def api_duplicate_save(save_id):
         return json_error(f"Spielstand konnte nicht dupliziert werden: {str(e)}", 500)
 
 
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    try:
+        with app.app_context():
+            if request.method == "GET":
+                return jsonify({"ok": True, "settings": GameSaveService.get_global_settings()})
+
+            payload = request.get_json(silent=True) or {}
+            settings = GameSaveService.update_global_settings(payload)
+            return jsonify({"ok": True, "message": "Einstellungen gespeichert.", "settings": settings})
+    except ValueError as e:
+        return json_error(str(e), 400)
+    except Exception as e:
+        app.logger.exception("Settings API failed")
+        return json_error(f"Einstellungen konnten nicht gespeichert werden: {str(e)}", 500)
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -546,7 +594,8 @@ def index():
 
     with app.app_context():
         saves = [save.to_dict() for save in GameSaveService.list_saves()]
-        return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID), saves=saves)
+        settings = GameSaveService.get_global_settings()
+        return render_template("index.html", has_saved_game=has_saved_game(ROOM_ID), saves=saves, settings=settings)
 
 
 @app.route("/continue", methods=["POST"])
@@ -566,6 +615,8 @@ def lobby_page():
             "lobby.html",
             has_saved_game=has_saved_game(ROOM_ID),
             current_player_id=session.get("player_id"),
+            min_players=MIN_LOBBY_PLAYERS,
+            max_players=MAX_LOBBY_PLAYERS,
         )
 
 
@@ -573,9 +624,10 @@ def lobby_page():
 def lobby_join():
     with state_lock, app.app_context():
         load_game_state(ROOM_ID)
-        name = clean_display_text(request.form.get("name", "").strip())
-        if not name:
-            return json_error("Name erforderlich")
+        try:
+            name = clean_lobby_name(request.form.get("name", ""))
+        except ValueError as exc:
+            return json_error(str(exc))
 
         current_game = get_current_state()
         existing_player = None
@@ -593,18 +645,21 @@ def lobby_join():
             session["room_id"] = ROOM_ID
             return jsonify({"ok": True, "player_id": existing_player["id"], "game_started": True})
 
-        if existing_player is not None:
-            player_id = existing_player["id"]
-        else:
-            matching_player_id = next(
-                (
-                    player_id
-                    for player_id, player in lobby_state.get("players", {}).items()
-                    if player["name"].strip().lower() == name.lower()
-                ),
-                None,
-            )
-            player_id = matching_player_id or str(uuid4())
+        current_session_player = session.get("player_id")
+        matching_player_id = next(
+            (
+                player_id
+                for player_id, player in lobby_state.get("players", {}).items()
+                if player["name"].strip().lower() == name.lower()
+            ),
+            None,
+        )
+        if matching_player_id and matching_player_id != current_session_player:
+            return json_error("Dieser Name ist bereits vergeben.", 409)
+        if len(lobby_state.get("players", {})) >= MAX_LOBBY_PLAYERS and not current_session_player:
+            return json_error("Die Lobby ist voll.", 409)
+
+        player_id = matching_player_id or current_session_player or str(uuid4())
 
         lobby_state.setdefault("players", {})[player_id] = {
             "name": name,
@@ -634,11 +689,17 @@ def lobby_ready():
 def lobby_state_api():
     with state_lock, app.app_context():
         load_game_state(ROOM_ID)
+        host_id = next(iter(lobby_state.get("players", {})), None)
         players = [
-            {"id": player_id, "name": player["name"], "ready": bool(player.get("ready"))}
-            for player_id, player in lobby_state.get("players", {}).items()
+            {
+                "id": player_id,
+                "name": player["name"],
+                "ready": bool(player.get("ready")),
+                "host": player_id == host_id,
+                "order": index + 1,
+            }
+            for index, (player_id, player) in enumerate(lobby_state.get("players", {}).items())
         ]
-        players.sort(key=lambda player: player["name"].lower())
         all_ready = bool(players) and all(player["ready"] for player in players)
 
         return jsonify(
@@ -648,6 +709,9 @@ def lobby_state_api():
                 "all_ready": all_ready,
                 "game_started": bool(lobby_state.get("game_started")),
                 "has_saved_game": has_saved_game(ROOM_ID),
+                "min_players": MIN_LOBBY_PLAYERS,
+                "max_players": MAX_LOBBY_PLAYERS,
+                "host_id": host_id,
                 "redirect_url": url_for("spiel"),
             }
         )
@@ -660,7 +724,7 @@ def lobby_start():
             return jsonify({"ok": True, "redirect_url": url_for("spiel")})
 
         players = list(lobby_state.get("players", {}).items())
-        if len(players) < 2:
+        if len(players) < MIN_LOBBY_PLAYERS:
             return json_error("Mindestens 2 Spieler erforderlich")
         if not all(player.get("ready") for _, player in players):
             return json_error("Nicht alle Spieler sind bereit")

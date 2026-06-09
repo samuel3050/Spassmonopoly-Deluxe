@@ -7,106 +7,310 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-home">
-  <main class="hero-shell">
-    <section class="hero-card">
-      <div class="hero-badge">Browser-Brettspiel</div>
-      <h1>Spassmonopoly Deluxe</h1>
-      <p class="hero-copy">
-        Ein launchfaehiges Web-Game fuer gemeinsame Runden: schneller Einstieg,
-        klares Zugsystem, responsive Spielflaeche und ein sauber protokollierter Verlauf.
-      </p>
+  <main class="app-dashboard">
+    <header class="main-menu-header">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">SD</div>
+        <div>
+          <div class="hero-badge">Launch Build</div>
+          <h1>Spassmonopoly Deluxe</h1>
+          <p class="panel-copy">Ein schneller digitaler Spieltisch fuer lokale Runden, Lobbys und gespeicherte Sessions.</p>
+        </div>
+      </div>
 
-      <div class="start-menu">
-        <form method="post" action="{{ url_for('continue_game') }}">
-          <button type="submit" class="primary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>
-            Letzte Runde fortsetzen
-          </button>
+      <nav class="menu-tabs" aria-label="Hauptnavigation">
+        <a class="menu-tab active" href="#play">Spielen</a>
+        <a class="menu-tab" href="#saves">Saves</a>
+        <a class="menu-tab" href="#settings">Settings</a>
+        <a class="menu-tab" href="#about">Info</a>
+      </nav>
+    </header>
+
+    <section id="play" class="dashboard-grid">
+      <section class="menu-panel primary-menu-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="hero-badge">Schnellstart</div>
+            <h2>Naechste Runde</h2>
+          </div>
+          <span class="status-chip status-chip-hot">{{ saves|length }} Saves</span>
+        </div>
+
+        <div class="action-stack">
+          <form method="post" action="{{ url_for('continue_game') }}">
+            <button type="submit" class="primary-btn launch-action" {% if not has_saved_game %}disabled{% endif %}>
+              Letzte Runde fortsetzen
+            </button>
+          </form>
+          <a href="{{ url_for('lobby_page') }}" class="secondary-link launch-action">Online-Lobby oeffnen</a>
+        </div>
+
+        <form method="post" class="new-game-panel">
+          <label class="field-label" for="anzahl">Lokale Spieler</label>
+          <div class="number-row">
+            <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
+            <button type="submit" class="secondary-btn">Lokales Spiel</button>
+          </div>
         </form>
-      </div>
 
-      <form method="post" class="stack-form">
-        <div class="hero-badge">Neue Runde</div>
-        <label class="field-label" for="anzahl">Wie viele Spieler sind dabei?</label>
-        <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
-        <button type="submit" class="secondary-btn full-width">Neue Runde starten</button>
-      </form>
-
-      <div class="feature-row">
-        <div class="feature-pill">2 bis 8 Spieler</div>
-        <div class="feature-pill">Responsive Brettansicht</div>
-        <div class="feature-pill">Live-Logging</div>
-      </div>
-
-      <section class="hero-highlights">
-        <article class="hero-highlight-card">
-          <strong>Sofort spielbar</strong>
-          <p>Namen eingeben, starten und direkt mit Wuerfeln, Bewegung und Feldaktion loslegen.</p>
-        </article>
-        <article class="hero-highlight-card">
-          <strong>Klarer Flow</strong>
-          <p>Buttons sind nur aktiv, wenn die jeweilige Aktion im aktuellen Spielzustand erlaubt ist.</p>
-        </article>
-        <article class="hero-highlight-card">
-          <strong>Robustes Log</strong>
-          <p>Wuerfe, Bewegungen, Karten, Strafen und Fehler werden mit Zeitstempel festgehalten.</p>
-        </article>
+        <div class="feature-row compact-features">
+          <span class="feature-pill">2-8 Spieler</span>
+          <span class="feature-pill">Autosave</span>
+          <span class="feature-pill">Responsive Board</span>
+        </div>
       </section>
 
-      <section class="save-manager" aria-labelledby="saveManagerTitle">
-        <div class="save-manager-heading">
-          <div>
-            <div class="hero-badge">Spielstaende</div>
-            <h2 id="saveManagerTitle">Gespeicherte Spiele</h2>
-          </div>
-          <span class="status-chip">{{ saves|length }} vorhanden</span>
+      <section class="menu-panel menu-panel-stack">
+        <div class="mini-stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Spielstaende</span>
+            <strong class="stat-value">{{ saves|length }}</strong>
+            <span class="stat-meta">Verfuegbar</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Status</span>
+            <strong class="stat-value">{% if has_saved_game %}Bereit{% else %}Neu{% endif %}</strong>
+            <span class="stat-meta">Fortsetzen</span>
+          </article>
         </div>
 
-        {% if saves %}
-        <div class="save-list">
-          {% for save in saves %}
-          <article class="save-card">
-            <div>
-              <strong>{{ save.name }}</strong>
-              <p>{{ save.player_count }} Spieler &middot; Runde {{ save.round }} &middot; {{ save.status }}</p>
-            </div>
-            <div class="save-meta">
-              <span>Erstellt: {{ save.created_at[:10] }}</span>
-              <span>Geaendert: {{ save.updated_at[:10] }}</span>
-              <span>Aktiv: {{ save.active_player or "n/a" }}</span>
-            </div>
-            <button type="button" class="primary-btn" onclick="loadSave('{{ save.id }}')">Laden</button>
-          </article>
-          {% endfor %}
+        <div class="release-notes">
+          <div class="hero-badge">Boardroom</div>
+          <h2>Klare Zuege, klare Saves</h2>
+          <p class="panel-copy">Wuerfe, Bewegung, Karten, Besitz und Logs werden serverseitig gespeichert und beim Laden wiederhergestellt.</p>
         </div>
-        {% else %}
-        <p class="empty-note">Noch keine Spielstaende vorhanden.</p>
-        {% endif %}
+      </section>
+    </section>
+
+    <section id="saves" class="save-manager pro-save-manager" aria-labelledby="saveManagerTitle">
+      <div class="save-manager-heading">
+        <div>
+          <div class="hero-badge">Save Manager</div>
+          <h2 id="saveManagerTitle">Gespeicherte Spiele</h2>
+        </div>
+        <input id="saveSearch" class="save-search" type="search" placeholder="Nach Name oder Datum suchen" autocomplete="off">
+      </div>
+
+      {% if saves %}
+      <div id="saveList" class="save-list save-list-pro">
+        {% for save in saves %}
+        <article class="save-card save-card-pro" data-save-id="{{ save.id }}" data-search="{{ (save.name ~ ' ' ~ save.created_at ~ ' ' ~ save.updated_at ~ ' ' ~ save.status)|lower }}">
+          <div class="save-title-block">
+            <strong>{{ save.name }}</strong>
+            <p>{{ save.player_count }} Spieler &middot; Runde {{ save.round }} &middot; {{ save.status }}</p>
+          </div>
+          <div class="save-meta save-meta-grid">
+            <span>Erstellt <strong>{{ save.created_at[:10] }}</strong></span>
+            <span>Geaendert <strong>{{ save.updated_at[:10] }}</strong></span>
+            <span>Aktiv <strong>{{ save.active_player or "n/a" }}</strong></span>
+          </div>
+          <div class="save-actions">
+            <button type="button" class="primary-btn" onclick="loadSave('{{ save.id }}')">Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" onclick="openSaveAction('rename', '{{ save.id }}', {{ save.name|tojson }})">Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" onclick="openSaveAction('duplicate', '{{ save.id }}', {{ save.name|tojson }})">++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Loeschen" onclick="openSaveAction('delete', '{{ save.id }}', {{ save.name|tojson }})">x</button>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-product-state">
+        <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+        <strong>Noch keine Spielstaende</strong>
+        <p class="empty-note">Starte eine neue Runde oder oeffne die Lobby. Der erste Autosave erscheint danach hier.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <section id="settings" class="dashboard-grid dashboard-grid-secondary">
+      <section class="menu-panel">
+        <div class="hero-badge">Einstellungen</div>
+        <h2>Spielgefuehl</h2>
+        <form id="settingsForm" class="settings-grid">
+          <label class="setting-row">
+            <span>Lautstaerke</span>
+            <input id="settingVolume" type="range" min="0" max="100" value="{{ settings.volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Animationen</span>
+            <select id="settingAnimations">
+              <option value="on" {% if settings.animations == "on" %}selected{% endif %}>Ein</option>
+              <option value="off" {% if settings.animations == "off" %}selected{% endif %}>Aus</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Theme</span>
+            <select id="settingTheme">
+              <option value="dark" {% if settings.theme == "dark" %}selected{% endif %}>Dunkel</option>
+              <option value="light" {% if settings.theme == "light" %}selected{% endif %}>Hell</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Autosave</span>
+            <select id="settingAutosave">
+              <option value="on" {% if settings.autosave == "on" %}selected{% endif %}>Ein</option>
+              <option value="off" {% if settings.autosave == "off" %}selected{% endif %}>Aus</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Spieltempo</span>
+            <select id="settingSpeed">
+              <option value="slow" {% if settings.speed == "slow" %}selected{% endif %}>Ruhig</option>
+              <option value="normal" {% if settings.speed == "normal" %}selected{% endif %}>Normal</option>
+              <option value="fast" {% if settings.speed == "fast" %}selected{% endif %}>Schnell</option>
+            </select>
+          </label>
+          <button type="submit" class="primary-btn">Einstellungen speichern</button>
+        </form>
+      </section>
+
+      <section id="about" class="menu-panel">
+        <div class="hero-badge">Produkt</div>
+        <h2>Spassmonopoly Deluxe</h2>
+        <p class="panel-copy">Gebaut als robustes Open-Source-Browsergame mit serverseitiger Spiellogik, Datenbank-Saves und einer UI fuer Desktop und Tablet.</p>
+        <div class="feature-row compact-features">
+          <span class="feature-pill">Flask</span>
+          <span class="feature-pill">SQLAlchemy</span>
+          <span class="feature-pill">MariaDB/MySQL-ready</span>
+        </div>
       </section>
     </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <div id="saveActionModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-compact">
+      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeSaveAction()">x</button>
+      <div id="saveActionBadge" class="hero-badge">Spielstand</div>
+      <h2 id="saveActionTitle">Spielstand bearbeiten</h2>
+      <p id="saveActionIntro" class="modal-intro"></p>
+      <label id="saveNameLabel" class="field-label" for="saveActionName">Name</label>
+      <input id="saveActionName" type="text" maxlength="64" autocomplete="off">
+      <div class="modal-actions">
+        <button id="saveActionPrimary" type="button" class="primary-btn" onclick="submitSaveAction()">Speichern</button>
+        <button type="button" class="secondary-btn" onclick="closeSaveAction()">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const toast = document.getElementById("toast");
+    let activeSaveAction = null;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      window.setTimeout(() => toast.classList.remove("show"), 2800);
+    }
+
+    async function apiPost(url, payload = null) {
+      const options = { method: "POST", headers: { "Content-Type": "application/json" } };
+      if (payload) options.body = JSON.stringify(payload);
+      const response = await fetch(url, options);
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.msg || "Aktion fehlgeschlagen.");
+      return data;
+    }
+
     async function loadSave(saveId) {
-      const toast = document.getElementById("toast");
       try {
-        const response = await fetch(`/api/save/${saveId}/load`, { method: "POST" });
-        const data = await response.json();
-        if (!response.ok || !data.ok) {
-          throw new Error(data.msg || "Spielstand konnte nicht geladen werden.");
-        }
-        toast.textContent = data.message || "Spielstand geladen.";
-        toast.classList.add("show");
+        const data = await apiPost(`/api/save/${saveId}/load`);
+        showToast(data.message || "Spielstand geladen.");
         window.setTimeout(() => {
           window.location.href = data.redirect_url || "/board";
-        }, 250);
+        }, 220);
       } catch (error) {
-        toast.textContent = error.message;
-        toast.classList.add("show");
-        window.setTimeout(() => toast.classList.remove("show"), 3200);
+        showToast(error.message);
       }
     }
+
+    function openSaveAction(action, saveId, saveName) {
+      activeSaveAction = { action, saveId, saveName };
+      const modal = document.getElementById("saveActionModal");
+      const title = document.getElementById("saveActionTitle");
+      const intro = document.getElementById("saveActionIntro");
+      const input = document.getElementById("saveActionName");
+      const label = document.getElementById("saveNameLabel");
+      const primary = document.getElementById("saveActionPrimary");
+
+      input.value = action === "duplicate" ? `${saveName} Kopie` : saveName;
+      input.style.display = action === "delete" ? "none" : "block";
+      label.style.display = action === "delete" ? "none" : "block";
+      primary.classList.toggle("danger-btn", action === "delete");
+
+      if (action === "rename") {
+        title.textContent = "Spielstand umbenennen";
+        intro.textContent = "Der Spielstand bleibt erhalten und bekommt nur einen neuen Anzeigenamen.";
+        primary.textContent = "Umbenennen";
+      } else if (action === "duplicate") {
+        title.textContent = "Spielstand duplizieren";
+        intro.textContent = "Erstellt eine zweite Version mit identischem Spielzustand.";
+        primary.textContent = "Duplizieren";
+      } else {
+        title.textContent = "Spielstand loeschen";
+        intro.textContent = `Willst du '${saveName}' wirklich loeschen?`;
+        primary.textContent = "Loeschen";
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      if (action !== "delete") input.focus();
+    }
+
+    function closeSaveAction() {
+      const modal = document.getElementById("saveActionModal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      activeSaveAction = null;
+    }
+
+    async function submitSaveAction() {
+      if (!activeSaveAction) return;
+      const { action, saveId } = activeSaveAction;
+      const name = document.getElementById("saveActionName").value.trim();
+      try {
+        let data;
+        if (action === "rename") data = await apiPost(`/api/save/${saveId}/rename`, { name });
+        if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
+        if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
+        showToast(data.message || "Spielstand aktualisiert.");
+        window.setTimeout(() => window.location.reload(), 350);
+      } catch (error) {
+        showToast(error.message);
+      }
+    }
+
+    document.getElementById("saveSearch")?.addEventListener("input", (event) => {
+      const term = event.target.value.trim().toLowerCase();
+      document.querySelectorAll(".save-card-pro").forEach((card) => {
+        card.hidden = !card.dataset.search.includes(term);
+      });
+    });
+
+    document.getElementById("settingsForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = await apiPost("/api/settings", {
+          volume: document.getElementById("settingVolume").value,
+          animations: document.getElementById("settingAnimations").value,
+          theme: document.getElementById("settingTheme").value,
+          autosave: document.getElementById("settingAutosave").value,
+          speed: document.getElementById("settingSpeed").value,
+        });
+        showToast(data.message || "Einstellungen gespeichert.");
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+
+    document.getElementById("saveActionModal").addEventListener("click", (event) => {
+      if (event.target.id === "saveActionModal") closeSaveAction();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeSaveAction();
+    });
   </script>
 </body>
 </html>

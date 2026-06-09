@@ -521,6 +521,17 @@ function closeExitModal() {
   refs.exitModal.setAttribute("aria-hidden", "true");
 }
 
+function openSaveModal() {
+  refs.saveModal.classList.add("open");
+  refs.saveModal.setAttribute("aria-hidden", "false");
+  refs.manualSaveName.focus();
+}
+
+function closeSaveModal() {
+  refs.saveModal.classList.remove("open");
+  refs.saveModal.setAttribute("aria-hidden", "true");
+}
+
 async function handleRoll() {
   if (busy) return;
   setBusy(true);
@@ -576,11 +587,21 @@ async function handleFieldAction(action, fieldId) {
   }
 }
 
-async function saveGame() {
+function saveGame() {
+  openSaveModal();
+}
+
+async function submitSaveGame() {
   if (busy) return;
+  const name = refs.manualSaveName.value.trim();
+  if (name.length < 2) {
+    showToast("Bitte gib mindestens 2 Zeichen ein.");
+    return;
+  }
   setBusy(true);
   try {
-    const data = await postJson("/api/save-current");
+    const data = await postJson("/api/save-current", { name });
+    closeSaveModal();
     setState(data.state, { toast: data.message || "Spielstand gespeichert." });
     lastSignature = getStateSignature(data.state);
   } catch (error) {
@@ -611,6 +632,8 @@ async function exitGame(mode) {
 function cacheRefs() {
   refs.modal = document.getElementById("fieldModal");
   refs.exitModal = document.getElementById("exitModal");
+  refs.saveModal = document.getElementById("saveModal");
+  refs.manualSaveName = document.getElementById("manualSaveName");
   refs.modalContent = document.getElementById("fieldModalContent");
   refs.boardGrid = document.getElementById("boardGrid");
   refs.scoreList = document.getElementById("scoreList");
@@ -661,6 +684,9 @@ function bindEvents() {
   refs.exitModal.addEventListener("click", (event) => {
     if (event.target === refs.exitModal) closeExitModal();
   });
+  refs.saveModal.addEventListener("click", (event) => {
+    if (event.target === refs.saveModal) closeSaveModal();
+  });
   refs.drawerScrim.addEventListener("click", () => closeDrawer());
   refs.eventSearch.addEventListener("input", (event) => {
     eventSearchTerm = event.target.value.trim().toLowerCase();
@@ -675,6 +701,7 @@ function bindEvents() {
     if (event.key === "Escape") {
       closeFieldModal();
       closeExitModal();
+      closeSaveModal();
       closeDrawer();
     }
   });
@@ -699,10 +726,12 @@ document.addEventListener("DOMContentLoaded", bootBoard);
 window.closeDrawer = closeDrawer;
 window.closeFieldModal = closeFieldModal;
 window.closeExitModal = closeExitModal;
+window.closeSaveModal = closeSaveModal;
 window.showFieldInfo = showFieldInfo;
 window.showPendingField = showPendingField;
 window.handleFieldAction = handleFieldAction;
 window.handleRoll = handleRoll;
 window.handleMove = handleMove;
 window.saveGame = saveGame;
+window.submitSaveGame = submitSaveGame;
 window.exitGame = exitGame;

@@ -10,6 +10,14 @@ from .models import Card, Field, GameEvent, GameSave, GameStateSnapshot, Player,
 class GameSaveService:
     """Service layer for game save operations with transaction support."""
 
+    DEFAULT_GLOBAL_SETTINGS = {
+        "volume": "70",
+        "animations": "on",
+        "theme": "dark",
+        "autosave": "on",
+        "speed": "normal",
+    }
+
     @staticmethod
     def validate_game_state(game_state: Dict[str, Any]) -> None:
         if not isinstance(game_state, dict):
@@ -407,6 +415,54 @@ class GameSaveService:
         except SQLAlchemyError as e:
             db.session.rollback()
             raise ValueError(f"Database error adding event: {str(e)}") from e
+
+    @staticmethod
+    def get_global_settings() -> Dict[str, str]:
+        """Return user-facing application settings stored outside a single save."""
+        settings = dict(GameSaveService.DEFAULT_GLOBAL_SETTINGS)
+        rows = db.session.query(Setting).filter(Setting.game_save_id.is_(None)).all()
+        for row in rows:
+            settings[str(row.key)] = str(row.value)
+        return settings
+
+    @staticmethod
+    def update_global_settings(values: Dict[str, Any]) -> Dict[str, str]:
+        """Persist validated application settings."""
+        allowed = GameSaveService.DEFAULT_GLOBAL_SETTINGS
+        normalized = {}
+        for key, value in values.items():
+            if key not in allowed:
+                continue
+            text_value = str(value).strip()
+            if key == "volume":
+                try:
+                    text_value = str(max(0, min(100, int(text_value))))
+                except ValueError:
+                    text_value = allowed[key]
+            elif key in {"animations", "autosave"}:
+                text_value = "on" if text_value in {"on", "true", "1", "yes"} else "off"
+            elif key == "theme":
+                text_value = text_value if text_value in {"dark", "light"} else allowed[key]
+            elif key == "speed":
+                text_value = text_value if text_value in {"slow", "normal", "fast"} else allowed[key]
+            normalized[key] = text_value
+
+        try:
+            for key, value in normalized.items():
+                row = (
+                    db.session.query(Setting)
+                    .filter(Setting.game_save_id.is_(None), Setting.key == key)
+                    .first()
+                )
+                if row is None:
+                    db.session.add(Setting(game_save_id=None, key=key, value=value))
+                else:
+                    row.value = value
+            db.session.commit()
+            return GameSaveService.get_global_settings()
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            raise ValueError(f"Database error updating settings: {str(e)}") from e
 
     @staticmethod
     def check_connection() -> bool:

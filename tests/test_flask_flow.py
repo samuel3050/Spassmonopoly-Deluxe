@@ -80,12 +80,26 @@ class FlaskGameFlowTests(unittest.TestCase):
         self.assertTrue(saves_response["ok"])
         self.assertGreaterEqual(len(saves_response["saves"]), 1)
 
-        manual_save = self.client.post("/api/save-current").get_json()
+        manual_save = self.client.post("/api/save-current", json={"name": "Freitag Abend Runde"}).get_json()
         self.assertTrue(manual_save["ok"])
         self.assertEqual(manual_save["state"]["phase"], "roll")
         self.assertIn("gespeichert", manual_save["message"])
 
-        save_id = self.client.get("/api/saves").get_json()["saves"][0]["id"]
+        saves = self.client.get("/api/saves").get_json()["saves"]
+        named_save = next(save for save in saves if save["name"] == "Freitag Abend Runde")
+        save_id = named_save["id"]
+
+        renamed = self.client.post(f"/api/save/{save_id}/rename", json={"name": "Finale Runde"}).get_json()
+        self.assertTrue(renamed["ok"])
+        self.assertEqual(renamed["save"]["name"], "Finale Runde")
+
+        duplicated = self.client.post(f"/api/save/{save_id}/duplicate", json={"name": "Finale Runde Kopie"}).get_json()
+        self.assertTrue(duplicated["ok"])
+        duplicate_id = duplicated["save"]["id"]
+
+        deleted = self.client.post(f"/api/save/{duplicate_id}/delete").get_json()
+        self.assertTrue(deleted["ok"])
+
         loaded = self.client.post(f"/api/save/{save_id}/load").get_json()
         self.assertTrue(loaded["ok"])
 
@@ -97,6 +111,32 @@ class FlaskGameFlowTests(unittest.TestCase):
         exited = self.client.post("/api/exit-game", json={"mode": "save"}).get_json()
         self.assertTrue(exited["ok"])
         self.assertEqual(exited["redirect_url"], "/")
+
+    def test_settings_api_persists_global_preferences(self):
+        saved = self.client.post(
+            "/api/settings",
+            json={"volume": "44", "animations": "off", "theme": "light", "autosave": "on", "speed": "fast"},
+        ).get_json()
+        self.assertTrue(saved["ok"])
+        self.assertEqual(saved["settings"]["volume"], "44")
+        self.assertEqual(saved["settings"]["theme"], "light")
+
+        loaded = self.client.get("/api/settings").get_json()
+        self.assertTrue(loaded["ok"])
+        self.assertEqual(loaded["settings"]["speed"], "fast")
+
+    def test_lobby_rejects_duplicate_names(self):
+        first_client = self.game_module.app.test_client()
+        second_client = self.game_module.app.test_client()
+
+        self.assertTrue(first_client.post("/lobby/new").status_code in {302, 303})
+        first_join = first_client.post("/lobby/join", data={"name": "Mara"}).get_json()
+        self.assertTrue(first_join["ok"])
+
+        duplicate_response = second_client.post("/lobby/join", data={"name": "Mara"})
+        duplicate = duplicate_response.get_json()
+        self.assertEqual(duplicate_response.status_code, 409)
+        self.assertFalse(duplicate["ok"])
 
     def test_invalid_save_state_is_rejected_before_commit(self):
         with self.game_module.app.app_context():
