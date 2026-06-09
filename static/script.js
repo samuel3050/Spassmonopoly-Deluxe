@@ -57,6 +57,11 @@ function isSpecialActionField(field) {
   return ["spezial", "gemeinschaft", "steuer", "los", "gefängnis", "gefaengnis"].includes(type);
 }
 
+function isDarkField(field) {
+  const color = String(field?.farbe_css || field?.farbe || "").toLowerCase();
+  return color.includes("#444") || color.includes("#6d") || color.includes("schwarz") || color.includes("dunkel");
+}
+
 function getPhaseChipText() {
   if (state.phase === "move") {
     return "Bewegen";
@@ -222,17 +227,22 @@ function renderBoardGrid() {
 
       const activeClass = state.positionen[state.aktiver] === fieldIndex ? " is-current" : "";
       const pendingClass = isPendingField(field.feld_id) ? " pending-action" : "";
+      const darkClass = isDarkField(field) ? " is-dark-field" : "";
       const owner = field.besitzer ? `<span class="field-owner">${escapeHtml(field.besitzer)}</span>` : "";
       const price = field.kaufpreis ? `<span class="field-price">${escapeHtml(field.kaufpreis)}</span>` : "";
+      const fieldTitle = `${fieldIndex + 1}. ${field.name} (${field.typ})`;
 
       html.push(`
         <button
           type="button"
-          class="field-tile${field.ist_kaufbar ? " field-buyable" : ""}${activeClass}${pendingClass}"
+          class="field-tile${field.ist_kaufbar ? " field-buyable" : ""}${activeClass}${pendingClass}${darkClass}"
           style="background: ${escapeHtml(field.farbe_css)};"
           onclick="showFieldInfo(${field.feld_id})"
+          aria-label="${escapeHtml(fieldTitle)}"
+          title="${escapeHtml(fieldTitle)}"
         >
-          <div>
+          <div class="field-head">
+            <span class="field-index">${fieldIndex + 1}</span>
             <span class="field-name">${escapeHtml(field.name)}</span>
             <span class="field-type">${escapeHtml(field.typ)}</span>
             ${owner}

@@ -1,3 +1,4 @@
+import os
 import socket
 import time
 import webbrowser
@@ -13,7 +14,8 @@ def get_lan_ip():
 
 
 def join_game():
-    url = f"http://{get_lan_ip()}:5000/lobby"
+    port = int(os.getenv("PORT", "5000"))
+    url = f"http://{get_lan_ip()}:{port}/lobby"
     print(f"Oeffne Browser zur Lobby: {url}")
     webbrowser.open(url)
     print("Browser geoeffnet. Gib deinen Namen in der Lobby ein und warte auf andere Spieler.")

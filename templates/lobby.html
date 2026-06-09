@@ -245,11 +245,11 @@
       <div class="lobby-actions" style="margin-bottom: 24px;">
         <form method="post" action="{{ url_for('lobby_continue') }}" style="flex: 1;">
           <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
-            Continue Last Game
+            Letzte Runde fortsetzen
           </button>
         </form>
         <form method="post" action="{{ url_for('lobby_new') }}" style="flex: 1;">
-          <button type="submit" class="secondary-btn">New Game</button>
+          <button type="submit" class="secondary-btn">Neue Runde</button>
         </form>
       </div>
 
@@ -293,11 +293,23 @@
     let autoRefreshInterval = null;
     let autoStartRequested = false;
 
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function showStatus(message, type = 'info') {
       const msgEl = document.getElementById('statusMessage');
-      msgEl.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+      const status = document.createElement('div');
+      status.className = `status-message ${type}`;
+      status.textContent = message;
+      msgEl.replaceChildren(status);
       setTimeout(() => {
-        msgEl.innerHTML = '';
+        msgEl.replaceChildren();
       }, 5000);
     }
 
@@ -361,16 +373,16 @@
         data.players.forEach(player => {
           const isCurrentPlayer = currentPlayerId === player.id;
           const readyClass = player.ready ? 'ready' : '';
-          const statusText = player.ready ? '✓ Bereit' : 'Wartet...';
+          const statusText = player.ready ? 'Bereit' : 'Wartet...';
           const statusClass = player.ready ? 'ready' : '';
 
           const playerEl = document.createElement('div');
           playerEl.className = `player-item ${readyClass}`;
           playerEl.innerHTML = `
-            <span class="player-name">${player.name}</span>
+            <span class="player-name">${escapeHtml(player.name)}</span>
             <span class="player-status ${statusClass}">${statusText}</span>
             ${isCurrentPlayer ? `<button class="player-ready-btn ${readyClass}" onclick="toggleReady()">
-              ${player.ready ? '✓ Bereit' : 'Bereit'}
+              ${player.ready ? 'Bereit' : 'Bereit setzen'}
             </button>` : ''}
           `;
           playersList.appendChild(playerEl);

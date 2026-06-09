@@ -296,6 +296,14 @@ def json_error(message, status_code=400):
     return jsonify({"ok": False, "msg": message}), status_code
 
 
+def parse_player_count(raw_value, default=4):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = default
+    return max(2, min(8, value))
+
+
 def render_board():
     with app.app_context():
         game_state = get_current_state()
@@ -430,7 +438,7 @@ def api_duplicate_save(save_id):
 def index():
     if request.method == "POST":
         delete_saved_game_state(ROOM_ID)
-        player_count = max(2, min(8, int(request.form["anzahl"])))
+        player_count = parse_player_count(request.form.get("anzahl"))
         session.clear()
         session["anzahl"] = player_count
         return redirect(url_for("namen"))

@@ -19,16 +19,16 @@
       <div class="start-menu">
         <form method="post" action="{{ url_for('continue_game') }}">
           <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
-            Continue Last Game
+            Letzte Runde fortsetzen
           </button>
         </form>
       </div>
 
       <form method="post" class="stack-form">
-        <div class="hero-badge">New Game</div>
+        <div class="hero-badge">Neue Runde</div>
         <label class="field-label" for="anzahl">Wie viele Spielerinnen und Spieler sind dabei?</label>
         <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
-        <button type="submit" class="secondary-btn">Start a New Game</button>
+        <button type="submit" class="secondary-btn">Neue Runde starten</button>
       </form>
 
       <div class="feature-row">
