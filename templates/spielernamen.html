@@ -9,22 +9,22 @@
 <body class="page page-setup">
   <main class="setup-shell">
     <section class="setup-card">
-      <div class="hero-badge">Lobby</div>
+      <div class="hero-badge">Setup</div>
       <h1>Spielrunde vorbereiten</h1>
       <p class="hero-copy">
-        Vergib für alle {{ anzahl }} Plätze einen Namen. Leere Felder werden automatisch mit
-        passenden Standardnamen ergänzt, damit ihr ohne Unterbrechung starten könnt.
+        Vergib fuer alle {{ anzahl }} Plaetze einen Namen. Leere Felder werden automatisch ersetzt,
+        damit die Runde ohne Unterbrechung starten kann.
       </p>
 
       <form method="post" class="players-form">
         {% for i in range(1, anzahl + 1) %}
         <label class="field-label" for="spieler{{ i }}">Spieler {{ i }}</label>
-        <input id="spieler{{ i }}" type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required>
+        <input id="spieler{{ i }}" type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required maxlength="24">
         {% endfor %}
 
         <div class="form-actions">
-          <a href="{{ url_for('index') }}" class="secondary-link">Zurück</a>
-          <button type="submit" class="primary-btn">Spiel öffnen</button>
+          <a href="{{ url_for('index') }}" class="secondary-link">Zurueck</a>
+          <button type="submit" class="primary-btn">Spiel oeffnen</button>
         </div>
       </form>
     </section>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spaßmonopoly Deluxe</title>
+  <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-board">
@@ -12,15 +12,15 @@
       <div class="dock-brand">
         <div class="hero-badge">Live-Runde</div>
         <div>
-          <h1>Spaßmonopoly Deluxe</h1>
-          <p class="panel-copy">Klar, direkt und spielig. Das Spielfeld bleibt sichtbar, die Steuerung sitzt in der Mitte.</p>
+          <h1>Spassmonopoly Deluxe</h1>
+          <p class="panel-copy">Moderner Spieltisch, klare Aktionen und ein Brett, das immer sichtbar bleibt.</p>
         </div>
       </div>
 
       <div class="dock-actions">
         <button id="playersPanelButton" type="button" class="secondary-btn">Spieler</button>
         <button id="ownershipPanelButton" type="button" class="secondary-btn">Besitz</button>
-        <button id="logPanelButton" type="button" class="secondary-btn">Verlauf</button>
+        <button id="logPanelButton" type="button" class="secondary-btn">Log</button>
         <button id="helpPanelButton" type="button" class="secondary-btn">Hilfe</button>
         <form method="post" action="{{ url_for('neues_spiel') }}">
           <button type="submit" class="secondary-btn">Neue Runde</button>
@@ -34,7 +34,7 @@
           <div class="board-toolbar board-toolbar-focus">
             <div>
               <div class="hero-badge">Spielfeld</div>
-              <p class="board-copy">Klicke auf ein Feld für Details. Spezialfelder lösen jetzt eigene Effekte aus.</p>
+              <p class="board-copy">Klicke auf ein Feld fuer Details. Spezialfelder loesen eigene Effekte aus.</p>
             </div>
             <div class="toolbar-actions">
               <button id="currentFieldButton" type="button" class="secondary-btn">Aktives Feld</button>
@@ -54,12 +54,11 @@
               <p id="centerCopy" class="center-copy"></p>
 
               <div id="quickStats" class="quick-stats quick-stats-center"></div>
-
               <div id="turnSummary" class="turn-summary turn-summary-center"></div>
 
               <div id="diceDisplay" class="dice-display dice-display-center">
-                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel eins">
-                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel zwei">
+                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel eins">
+                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel zwei">
               </div>
 
               <div id="commandActions" class="command-actions command-actions-center"></div>
@@ -74,8 +73,8 @@
   <aside id="playersPanel" class="side-drawer" aria-hidden="true">
     <div class="side-drawer-card">
       <div class="panel-heading">
-        <h2>Spielerübersicht</h2>
-        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('players')">×</button>
+        <h2>Spieleruebersicht</h2>
+        <button type="button" class="drawer-close" aria-label="Schliessen" onclick="closeDrawer('players')">x</button>
       </div>
       <div class="drawer-meta">
         <span id="playerCountChip" class="status-chip"></span>
@@ -88,7 +87,7 @@
     <div class="side-drawer-card">
       <div class="panel-heading">
         <h2>Besitz</h2>
-        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('ownership')">×</button>
+        <button type="button" class="drawer-close" aria-label="Schliessen" onclick="closeDrawer('ownership')">x</button>
       </div>
       <div class="drawer-meta">
         <span id="ownershipCountChip" class="status-chip"></span>
@@ -101,7 +100,7 @@
     <div class="side-drawer-card">
       <div class="panel-heading">
         <h2>Spielverlauf</h2>
-        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('log')">×</button>
+        <button type="button" class="drawer-close" aria-label="Schliessen" onclick="closeDrawer('log')">x</button>
       </div>
       <div class="drawer-meta">
         <span class="status-chip">Live</span>
@@ -114,11 +113,11 @@
     <div class="side-drawer-card">
       <div class="panel-heading">
         <h2>Spielhilfe</h2>
-        <button type="button" class="drawer-close" aria-label="Schließen" onclick="closeDrawer('help')">×</button>
+        <button type="button" class="drawer-close" aria-label="Schliessen" onclick="closeDrawer('help')">x</button>
       </div>
       <div class="guide-list">
         <article class="guide-item">
-          <strong>1. Würfeln</strong>
+          <strong>1. Wuerfeln</strong>
           <p>Der Zug startet immer in der Mittelbox.</p>
         </article>
         <article class="guide-item">
@@ -126,8 +125,8 @@
           <p>Danach ziehst du direkt auf das markierte Zielfeld.</p>
         </article>
         <article class="guide-item">
-          <strong>3. Effekt auslösen</strong>
-          <p>Kauf, Abgabe oder Spezialeffekt werden dann im Popup oder mit dem Weiter-Button abgeschlossen.</p>
+          <strong>3. Effekt ausloesen</strong>
+          <p>Kauf, Abgabe oder Spezialeffekt werden im Popup oder mit dem Weiter-Button abgeschlossen.</p>
         </article>
       </div>
       <div id="boardInsights" class="board-insights board-insights-drawer"></div>
@@ -135,12 +134,11 @@
   </aside>
 
   <div id="drawerScrim" class="drawer-scrim" aria-hidden="true"></div>
-
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <div id="fieldModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card">
-      <button type="button" class="modal-close" aria-label="Schließen" onclick="closeFieldModal()">×</button>
+      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeFieldModal()">x</button>
       <div id="fieldModalContent"></div>
     </div>
   </div>

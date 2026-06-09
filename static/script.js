@@ -5,17 +5,18 @@ const BOARD_COORDS = [
   [0, 9], [0, 8], [0, 7], [0, 6], [0, 5], [0, 4], [0, 3], [0, 2], [0, 1],
 ];
 
-const refs = {};
 const DRAWER_KEYS = ["players", "ownership", "log", "help"];
+const refs = {};
 
 let state = window.gameData;
 let selectedFieldId = null;
 let activeDrawer = null;
 let busy = false;
 let toastTimer = null;
-let animationTimer = null;
-let statePollTimer = null;
-let lastStateSignature = "";
+let diceTimer = null;
+let pollTimer = null;
+let lastSignature = "";
+let previousPositions = [...(state.positionen || [])];
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -26,35 +27,35 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function eventTime(event) {
+  if (!event?.timestamp) {
+    return "--:--:--";
+  }
+  const date = new Date(event.timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return String(event.timestamp).slice(11, 19) || "--:--:--";
+  }
+  return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function getField(fieldId) {
   return state.felder.find((field) => Number(field.feld_id) === Number(fieldId));
 }
 
 function getFocusField() {
-  if (selectedFieldId) {
-    return getField(selectedFieldId);
-  }
-  if (state.popupFeld) {
-    return state.popupFeld;
-  }
-  if (!state.positionen?.length) {
-    return null;
-  }
+  if (selectedFieldId) return getField(selectedFieldId);
+  if (state.popupFeld) return state.popupFeld;
+  if (!state.positionen?.length) return null;
   return state.felder[state.positionen[state.aktiver]];
 }
 
 function isPendingField(fieldId) {
-  return state.phase === "field_action"
-    && state.popupFeld
-    && Number(state.popupFeld.feld_id) === Number(fieldId);
+  return state.phase === "field_action" && state.popupFeld && Number(state.popupFeld.feld_id) === Number(fieldId);
 }
 
 function isSpecialActionField(field) {
-  if (!field) {
-    return false;
-  }
-  const type = String(field.typ || "").toLowerCase();
-  return ["spezial", "gemeinschaft", "steuer", "los", "gefängnis", "gefaengnis"].includes(type);
+  const type = String(field?.typ || "").toLowerCase();
+  return ["spezial", "gemeinschaft", "steuer", "los", "gefaengnis", "gefangnis"].includes(type);
 }
 
 function isDarkField(field) {
@@ -62,80 +63,72 @@ function isDarkField(field) {
   return color.includes("#444") || color.includes("#6d") || color.includes("schwarz") || color.includes("dunkel");
 }
 
-function getPhaseChipText() {
-  if (state.phase === "move") {
-    return "Bewegen";
-  }
-  if (state.phase === "field_action") {
-    return "Feldaktion";
-  }
-  return "Würfeln";
+function getPhaseLabel() {
+  if (state.gameStatus === "finished") return "Beendet";
+  if (state.phase === "move") return "Bewegen";
+  if (state.phase === "field_action") return "Feldaktion";
+  return "Wuerfeln";
 }
 
-function getCenterCardCopy() {
+function getActionCopy() {
+  if (state.gameStatus === "finished") {
+    return state.lastEvent || "Die Runde ist beendet.";
+  }
   if (state.phase === "move" && state.displayRoll) {
-    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewürfelt und zieht jetzt weiter.`;
+    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewuerfelt. Jetzt wird gezogen.`;
   }
   if (state.phase === "field_action" && state.popupFeld) {
-    return state.popupHint || `${state.activePlayerName} wertet jetzt ${state.popupFeld.name} aus.`;
+    return state.popupHint || `${state.activePlayerName} wertet ${state.popupFeld.name} aus.`;
   }
-  return "Die Runde wartet auf den nächsten Wurf.";
+  return `${state.activePlayerName || "Der aktive Spieler"} ist bereit fuer den naechsten Wurf.`;
 }
 
 function getInsightCopy(field) {
-  if (!field) {
-    return "Wähle ein Feld auf dem Spielbrett aus, um zusätzliche Informationen zu sehen.";
-  }
-  if (state.popupHint && isPendingField(field.feld_id)) {
-    return state.popupHint;
-  }
-  if (field.besitzer) {
-    return `${field.name} gehört aktuell ${field.besitzer}. Ein Besuch auf diesem Feld löst die passende Abgabe aus.`;
-  }
-  if (field.ist_kaufbar) {
-    return `${field.name} ist frei und kann beim nächsten Besuch gesichert werden.`;
-  }
-  return field.zusatz_regel || "Dieses Feld bringt Abwechslung in die Partie.";
+  if (!field) return "Waehle ein Feld aus, um Details zu sehen.";
+  if (state.popupHint && isPendingField(field.feld_id)) return state.popupHint;
+  if (field.besitzer) return `${field.name} gehoert ${field.besitzer}.`;
+  if (field.ist_kaufbar) return `${field.name} ist frei und kann beim Besuch gesichert werden.`;
+  return field.zusatz_regel || "Dieses Feld hat keinen zusaetzlichen Effekt.";
 }
 
 function scoreCardMarkup(entry, index) {
-  const activeBadge = entry.is_active ? '<span class="status-chip">Am Zug</span>' : "";
   return `
     <article class="score-card${entry.is_active ? " is-active" : ""}">
       <div class="score-topline">
         <span class="player-dot p${index + 1}"></span>
         <strong>${escapeHtml(entry.name)}</strong>
-        ${activeBadge}
+        ${entry.is_active ? '<span class="status-chip status-chip-hot">Am Zug</span>' : ""}
       </div>
       <div class="score-metrics">
-        <span>Aktionspunkte: ${escapeHtml(entry.drinks)}</span>
-        <span>Schritte: ${escapeHtml(entry.steps)}</span>
-        <span>Gesicherte Felder: ${escapeHtml(entry.properties)}</span>
+        <span>AP <strong>${escapeHtml(entry.drinks)}</strong></span>
+        <span>Felder <strong>${escapeHtml(entry.properties)}</strong></span>
+        <span>Schritte <strong>${escapeHtml(entry.steps)}</strong></span>
       </div>
-      <div class="score-position">Aktuelle Position: ${escapeHtml(entry.position)}</div>
+      <div class="score-position">${escapeHtml(entry.position)}</div>
     </article>
   `;
 }
 
 function ownershipMarkup(entry) {
-  const fields = entry.fields.length ? escapeHtml(entry.fields.join(", ")) : "Noch keine Felder";
+  const fields = entry.fields.length ? entry.fields.join(", ") : "Noch keine Felder";
   return `
     <article class="ownership-card">
       <strong>${escapeHtml(entry.owner)}</strong>
-      <div class="ownership-meta">
-        <span>${escapeHtml(entry.count)} Feld${entry.count === 1 ? "" : "er"} gesichert</span>
-        <span>${fields}</span>
-      </div>
+      <span>${escapeHtml(entry.count)} gesichert</span>
+      <p>${escapeHtml(fields)}</p>
     </article>
   `;
 }
 
-function eventMarkup(message, index) {
-  const label = index === 0 ? "Neu" : `Eintrag ${index + 1}`;
+function eventMarkup(entry) {
+  const event = typeof entry === "string"
+    ? { message: entry, type: "legacy", severity: "info" }
+    : entry;
   return `
-    <article class="event-item">
-      <strong>${label}</strong>
-      <p>${escapeHtml(message)}</p>
+    <article class="event-item event-${escapeHtml(event.severity || "info")}">
+      <span class="event-time">[${escapeHtml(eventTime(event))}]</span>
+      <strong>${escapeHtml(event.type || "info")}</strong>
+      <p>${escapeHtml(event.message || "")}</p>
     </article>
   `;
 }
@@ -151,54 +144,45 @@ function statCardMarkup(label, value, meta) {
 }
 
 function buildFieldActions(field) {
-  const canAct = state.canAct !== false;
+  const canAct = state.canAct !== false && state.gameStatus !== "finished";
   if (!isPendingField(field.feld_id)) {
-    return '<button type="button" class="secondary-btn" onclick="closeFieldModal()">Schließen</button>';
+    return '<button type="button" class="secondary-btn" onclick="closeFieldModal()">Schliessen</button>';
   }
-
   if (!canAct) {
     return `<button type="button" class="primary-btn" disabled>Warten auf ${escapeHtml(state.activePlayerName || "den aktiven Spieler")}</button>`;
   }
 
   const activePlayerName = state.spieler[state.popupSpieler];
-
   if (!field.besitzer && field.ist_kaufbar) {
     return `
       <button type="button" class="primary-btn" onclick="handleFieldAction('kaufen', ${field.feld_id})">Feld sichern</button>
-      <button type="button" class="secondary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Ohne Kauf weiter</button>
+      <button type="button" class="secondary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Weiter</button>
     `;
   }
-
   if (field.besitzer && field.besitzer !== activePlayerName) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestätigen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestaetigen</button>`;
   }
-
   if (isSpecialActionField(field)) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt auslösen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt ausloesen</button>`;
   }
-
-  return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Zug abschließen</button>`;
+  return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Zug abschliessen</button>`;
 }
 
 function createFieldDetails(field) {
-  const owner = field.besitzer ? field.besitzer : "Noch frei";
-  const intro = isPendingField(field.feld_id)
-    ? `${escapeHtml(state.activePlayerName)} befindet sich aktuell auf diesem Feld.`
-    : "Detailansicht für dieses Spielfeld.";
-  const note = isPendingField(field.feld_id) && state.popupHint
-    ? state.popupHint
-    : (field.zusatz_regel || "Dieses Feld besitzt keine zusätzliche Sonderregel.");
-
+  const owner = field.besitzer || "Noch frei";
+  const active = isPendingField(field.feld_id);
+  const intro = active ? `${state.activePlayerName} steht aktuell hier.` : "Detailansicht fuer dieses Feld.";
+  const note = active && state.popupHint ? state.popupHint : (field.zusatz_regel || "Keine Sonderregel.");
   return `
-    <div class="hero-badge">${isPendingField(field.feld_id) ? "Aktive Feldaktion" : "Spielfeld-Info"}</div>
+    <div class="hero-badge">${active ? "Aktive Aktion" : "Feldinfo"}</div>
     <h2>${escapeHtml(field.name)}</h2>
     <p class="modal-intro">${escapeHtml(intro)}</p>
     <div class="modal-meta">
-      <div class="modal-row"><span>Kategorie</span><strong>${escapeHtml(field.typ)}</strong></div>
+      <div class="modal-row"><span>Typ</span><strong>${escapeHtml(field.typ)}</strong></div>
       <div class="modal-row"><span>Status</span><strong>${escapeHtml(owner)}</strong></div>
-      <div class="modal-row"><span>Preis</span><strong>${escapeHtml(field.kaufpreis || "—")}</strong></div>
-      <div class="modal-row"><span>Abgabe</span><strong>${escapeHtml(field.miete || "—")}</strong></div>
-      <div class="modal-row"><span>Bonus</span><strong>${escapeHtml(field.alkohol_typ)} · ${escapeHtml(field.alkohol_menge)}</strong></div>
+      <div class="modal-row"><span>Preis</span><strong>${escapeHtml(field.kaufpreis || "-")}</strong></div>
+      <div class="modal-row"><span>Abgabe</span><strong>${escapeHtml(field.miete || "-")}</strong></div>
+      <div class="modal-row"><span>Bonus</span><strong>${escapeHtml(field.alkohol_typ || "-")} / ${escapeHtml(field.alkohol_menge || "-")}</strong></div>
     </div>
     <div class="modal-note">${escapeHtml(note)}</div>
     <div class="modal-actions">${buildFieldActions(field)}</div>
@@ -207,56 +191,49 @@ function createFieldDetails(field) {
 
 function renderBoardGrid() {
   const coordToField = new Map(BOARD_COORDS.map((coord, index) => [coord.join(","), index]));
-  const html = [];
+  const tiles = [];
 
   for (let y = 0; y < 11; y += 1) {
     for (let x = 0; x < 11; x += 1) {
-      const key = `${x},${y}`;
-      if (!coordToField.has(key)) {
-        html.push('<div class="board-center-gap"></div>');
+      const fieldIndex = coordToField.get(`${x},${y}`);
+      if (fieldIndex === undefined) {
+        tiles.push('<div class="board-center-gap" aria-hidden="true"></div>');
         continue;
       }
 
-      const fieldIndex = coordToField.get(key);
       const field = state.felder[fieldIndex];
-      const tokens = state.positionen
-        .map((position, index) => (position === fieldIndex
-          ? `<span class="player-token p${index + 1}">${index + 1}</span>`
-          : ""))
-        .join("");
+      const tokens = state.positionen.map((position, index) => {
+        if (position !== fieldIndex) return "";
+        const moved = previousPositions[index] !== undefined && previousPositions[index] !== position ? " just-moved" : "";
+        const active = index === state.aktiver ? " active-token" : "";
+        return `<span class="player-token p${index + 1}${moved}${active}" title="${escapeHtml(state.spieler[index])}">${index + 1}</span>`;
+      }).join("");
+      const current = state.positionen[state.aktiver] === fieldIndex ? " is-current" : "";
+      const pending = isPendingField(field.feld_id) ? " pending-action" : "";
+      const dark = isDarkField(field) ? " is-dark-field" : "";
+      const selected = Number(selectedFieldId) === Number(field.feld_id) ? " is-selected" : "";
+      const title = `${fieldIndex + 1}. ${field.name} (${field.typ})`;
 
-      const activeClass = state.positionen[state.aktiver] === fieldIndex ? " is-current" : "";
-      const pendingClass = isPendingField(field.feld_id) ? " pending-action" : "";
-      const darkClass = isDarkField(field) ? " is-dark-field" : "";
-      const owner = field.besitzer ? `<span class="field-owner">${escapeHtml(field.besitzer)}</span>` : "";
-      const price = field.kaufpreis ? `<span class="field-price">${escapeHtml(field.kaufpreis)}</span>` : "";
-      const fieldTitle = `${fieldIndex + 1}. ${field.name} (${field.typ})`;
-
-      html.push(`
+      tiles.push(`
         <button
           type="button"
-          class="field-tile${field.ist_kaufbar ? " field-buyable" : ""}${activeClass}${pendingClass}${darkClass}"
-          style="background: ${escapeHtml(field.farbe_css)};"
+          class="field-tile${field.ist_kaufbar ? " field-buyable" : ""}${current}${pending}${dark}${selected}"
+          style="--field-color: ${escapeHtml(field.farbe_css)};"
           onclick="showFieldInfo(${field.feld_id})"
-          aria-label="${escapeHtml(fieldTitle)}"
-          title="${escapeHtml(fieldTitle)}"
+          aria-label="${escapeHtml(title)}"
+          title="${escapeHtml(title)}"
         >
-          <div class="field-head">
-            <span class="field-index">${fieldIndex + 1}</span>
-            <span class="field-name">${escapeHtml(field.name)}</span>
-            <span class="field-type">${escapeHtml(field.typ)}</span>
-            ${owner}
-          </div>
-          <div>
-            ${price}
-            <div class="field-players">${tokens}</div>
-          </div>
+          <span class="field-index">${fieldIndex + 1}</span>
+          <span class="field-name">${escapeHtml(field.name)}</span>
+          <span class="field-type">${escapeHtml(field.typ)}</span>
+          <span class="field-owner">${escapeHtml(field.besitzer || field.kaufpreis || "")}</span>
+          <span class="field-players">${tokens}</span>
         </button>
       `);
     }
   }
-
-  refs.boardGrid.innerHTML = html.join("");
+  refs.boardGrid.innerHTML = tiles.join("");
+  previousPositions = [...(state.positionen || [])];
 }
 
 function renderScoreboard() {
@@ -266,109 +243,83 @@ function renderScoreboard() {
 
 function renderOwnership() {
   refs.ownershipCountChip.textContent = `${state.ownership.length} aktiv`;
-  if (!state.ownership.length) {
-    refs.ownershipList.innerHTML = '<p class="empty-note">Noch wurde kein Feld dauerhaft gesichert.</p>';
-    return;
-  }
-
-  refs.ownershipList.innerHTML = state.ownership.map(ownershipMarkup).join("");
+  refs.ownershipList.innerHTML = state.ownership.length
+    ? state.ownership.map(ownershipMarkup).join("")
+    : '<p class="empty-note">Noch wurde kein Feld gesichert.</p>';
 }
 
 function renderEventLog() {
-  const entries = state.eventLog && state.eventLog.length
+  refs.eventLog.innerHTML = state.eventLog?.length
     ? state.eventLog.map(eventMarkup).join("")
-    : '<p class="empty-note">Der Spielverlauf erscheint hier, sobald die Runde startet.</p>';
-  refs.eventLog.innerHTML = entries;
+    : '<p class="empty-note">Der Spielverlauf erscheint hier nach dem Start.</p>';
+  window.requestAnimationFrame(() => {
+    refs.eventLog.scrollTop = refs.eventLog.scrollHeight;
+  });
 }
 
 function renderQuickStats() {
   const highlights = state.highlights || {};
-  const leaderName = highlights.leaderName || "Offen";
-  const leaderMeta = highlights.leaderName
-    ? `${highlights.leaderCount} Feld${highlights.leaderCount === 1 ? "" : "er"} vorne`
-    : "Noch kein Vorsprung";
-
   refs.quickStats.innerHTML = [
     statCardMarkup("Runde", `#${highlights.runde || 1}`, "Aktuell"),
     statCardMarkup("Zug", `#${highlights.zugnummer || 1}`, "Gesamt"),
-    statCardMarkup("Spitze", leaderName, leaderMeta),
-    statCardMarkup("Frei", `${highlights.freieFelder ?? 0}`, "Noch offen"),
+    statCardMarkup("Spitze", highlights.leaderName || "Offen", highlights.leaderName ? `${highlights.leaderCount} Felder` : "Keine Fuehrung"),
+    statCardMarkup("Frei", `${highlights.freieFelder ?? 0}`, "Felder"),
   ].join("");
 }
 
 function renderBoardInsights() {
-  const focusField = getFocusField();
-  const nextAction = state.phase === "field_action"
-    ? "Feldaktion abschließen"
-    : state.phase === "move"
-      ? "Figur weiterziehen"
-      : "Würfeln";
-
+  const field = getFocusField();
   refs.boardInsights.innerHTML = `
     <article class="insight-card">
-      <span class="insight-label">Fokusfeld</span>
-      <strong>${escapeHtml(focusField ? focusField.name : "Bereit für den Start")}</strong>
-      <p>${escapeHtml(getInsightCopy(focusField))}</p>
+      <span class="insight-label">Fokus</span>
+      <strong>${escapeHtml(field ? field.name : "Bereit")}</strong>
+      <p>${escapeHtml(getInsightCopy(field))}</p>
     </article>
     <article class="insight-card">
-      <span class="insight-label">Nächster Schritt</span>
-      <strong>${escapeHtml(nextAction)}</strong>
-      <p>Weiße Umrandung zeigt die aktuelle Position. Gold markiert ein Feld, das noch ausgewertet werden muss.</p>
+      <span class="insight-label">Status</span>
+      <strong>${escapeHtml(getPhaseLabel())}</strong>
+      <p>${escapeHtml(getActionCopy())}</p>
       <div class="legend-row">
-        <span class="legend-pill"><span class="legend-dot legend-dot-active"></span>Aktive Position</span>
-        <span class="legend-pill"><span class="legend-dot legend-dot-pending"></span>Offene Aktion</span>
+        <span class="legend-pill"><span class="legend-dot legend-dot-active"></span>Aktiv</span>
+        <span class="legend-pill"><span class="legend-dot legend-dot-pending"></span>Offen</span>
       </div>
     </article>
   `;
 }
 
 function renderActionPanel() {
-  const total = state.displayRoll ? state.displayRoll[0] + state.displayRoll[1] : null;
+  const canAct = state.canAct !== false && state.gameStatus !== "finished";
   const title = state.activePlayerName || "Bereit";
-  const canAct = state.canAct !== false;
-  let body = "Der nächste Zug kann gestartet werden.";
-  let actions = `
-    <button type="button" class="primary-btn" onclick="handleRoll()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Wuerfeln" : "Warten"}</button>
-  `;
+  let actions = `<button type="button" class="primary-btn" onclick="handleRoll()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Wuerfeln" : "Warten"}</button>`;
 
-  if (!canAct) {
-    body = `${title} ist am Zug. Dein Board aktualisiert sich automatisch.`;
-  }
-
-  if (state.phase === "move" && total !== null) {
-    body = `${title} hat ${total} gewürfelt. Jetzt die Figur bewegen.`;
-    actions = `
-      <button type="button" class="primary-btn" onclick="handleMove()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>
-    `;
+  if (state.gameStatus === "finished") {
+    actions = '<button type="button" class="primary-btn" disabled>Runde beendet</button>';
+  } else if (state.phase === "move") {
+    actions = `<button type="button" class="primary-btn" onclick="handleMove()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>`;
   } else if (state.phase === "field_action" && state.popupFeld) {
-    body = state.popupHint || `${title} ist auf ${state.popupFeld.name} gelandet.`;
-    actions = `
-      <button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld öffnen</button>
-    `;
+    actions = `<button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld oeffnen</button>`;
   }
 
-  refs.phaseChip.textContent = getPhaseChipText();
+  refs.phaseChip.textContent = getPhaseLabel();
+  refs.centerPlayerName.textContent = title;
+  refs.currentFieldButton.disabled = state.phase !== "field_action" || busy;
   refs.turnSummary.innerHTML = `
     <div class="turn-summary-hero">
       <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(body)}</span>
+      <span>${escapeHtml(getActionCopy())}</span>
     </div>
   `;
-  refs.centerPlayerName.textContent = title;
-  refs.currentFieldButton.disabled = state.phase !== "field_action" || busy;
   refs.commandActions.innerHTML = actions;
 }
 
 function renderCenterCard() {
-  refs.centerTitle.textContent = state.phase === "field_action" && state.popupFeld
-    ? state.popupFeld.name
-    : (state.activePlayerName || "Bereit");
-  refs.centerCopy.textContent = getCenterCardCopy();
+  refs.centerTitle.textContent = state.phase === "field_action" && state.popupFeld ? state.popupFeld.name : (state.activePlayerName || "Bereit");
+  refs.centerCopy.textContent = getActionCopy();
   refs.rollStatus.textContent = state.lastEvent || "";
 
-  const displayRoll = state.displayRoll || [1, 1];
-  refs.w1.src = `/static/dice/${displayRoll[0]}.png`;
-  refs.w2.src = `/static/dice/${displayRoll[1]}.png`;
+  const roll = state.displayRoll || [1, 1];
+  refs.w1.src = `/static/dice/${roll[0]}.png`;
+  refs.w2.src = `/static/dice/${roll[1]}.png`;
 }
 
 function renderModal() {
@@ -377,13 +328,12 @@ function renderModal() {
     refs.modal.setAttribute("aria-hidden", "true");
     return;
   }
-
   const field = getField(selectedFieldId);
   if (!field) {
-    closeFieldModal();
+    selectedFieldId = null;
+    renderModal();
     return;
   }
-
   refs.modalContent.innerHTML = createFieldDetails(field);
   refs.modal.classList.add("open");
   refs.modal.setAttribute("aria-hidden", "false");
@@ -405,21 +355,12 @@ function setState(nextState, options = {}) {
   state = nextState;
   window.gameData = nextState;
 
-  if (options.closeModal) {
-    selectedFieldId = null;
-  }
-
-  if (options.openPending && nextState.popupFeld) {
-    selectedFieldId = nextState.popupFeld.feld_id;
-  } else if (selectedFieldId && !getField(selectedFieldId)) {
-    selectedFieldId = null;
-  }
+  if (options.closeModal) selectedFieldId = null;
+  if (options.openPending && nextState.popupFeld) selectedFieldId = nextState.popupFeld.feld_id;
+  if (selectedFieldId && !getField(selectedFieldId)) selectedFieldId = null;
 
   renderApp();
-
-  if (options.toast) {
-    showToast(options.toast);
-  }
+  if (options.toast) showToast(options.toast);
 }
 
 function setBusy(nextBusy) {
@@ -428,122 +369,89 @@ function setBusy(nextBusy) {
 }
 
 function showToast(message) {
-  if (!message) {
-    return;
-  }
-
+  if (!message) return;
   refs.toast.textContent = message;
   refs.toast.classList.add("show");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => refs.toast.classList.remove("show"), 2200);
+  toastTimer = window.setTimeout(() => refs.toast.classList.remove("show"), 2400);
 }
 
 async function postJson(url, payload = null) {
-  const options = {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  };
-
-  if (payload) {
-    options.body = JSON.stringify(payload);
-  }
-
+  const options = { method: "POST", headers: { "Content-Type": "application/json" } };
+  if (payload) options.body = JSON.stringify(payload);
   const response = await fetch(url, options);
   const data = await response.json();
-
   if (!response.ok || !data.ok) {
     const error = new Error(data.msg || "Aktion konnte nicht ausgefuehrt werden.");
     error.state = data.state;
     throw error;
   }
-
   return data;
 }
 
 function getStateSignature(nextState) {
   return JSON.stringify({
     phase: nextState.phase,
+    status: nextState.gameStatus,
     active: nextState.aktiver,
     positions: nextState.positionen,
     points: nextState.konto,
     totals: nextState.gesamt,
     roll: nextState.displayRoll,
-    popupField: nextState.popupFeld ? nextState.popupFeld.feld_id : null,
-    lastEvent: nextState.lastEvent,
+    popup: nextState.popupFeld ? nextState.popupFeld.feld_id : null,
+    last: nextState.lastEvent,
+    logSize: nextState.eventLog?.length || 0,
     ownership: nextState.ownership,
     canAct: nextState.canAct,
   });
 }
 
 async function refreshState({ silent = true } = {}) {
-  if (busy) {
-    return;
-  }
-
+  if (busy) return;
   try {
     const response = await fetch("/api/state");
     const data = await response.json();
-    if (!response.ok || !data.ok) {
-      throw new Error(data.msg || "Spielstand konnte nicht aktualisiert werden.");
-    }
-
-    const nextSignature = getStateSignature(data.state);
-    if (nextSignature !== lastStateSignature) {
+    if (!response.ok || !data.ok) throw new Error(data.msg || "Spielstand konnte nicht aktualisiert werden.");
+    const signature = getStateSignature(data.state);
+    if (signature !== lastSignature) {
       const previousPhase = state.phase;
       const previousRoll = state.displayRoll;
       setState(data.state);
-      lastStateSignature = nextSignature;
-
-      if (
-        data.state.phase === "move"
-        && previousPhase !== "move"
-        && data.state.displayRoll
-        && JSON.stringify(previousRoll) !== JSON.stringify(data.state.displayRoll)
-      ) {
+      lastSignature = signature;
+      if (data.state.phase === "move" && previousPhase !== "move" && data.state.displayRoll && JSON.stringify(previousRoll) !== JSON.stringify(data.state.displayRoll)) {
         animateDice(data.state.displayRoll);
       }
     }
   } catch (error) {
-    if (!silent) {
-      showToast(error.message);
-    }
+    if (!silent) showToast(error.message);
   }
 }
 
 function animateDice(roll) {
-  if (!roll) {
-    return;
-  }
+  if (!roll) return;
+  window.clearInterval(diceTimer);
+  let ticks = 0;
+  refs.diceDisplay.classList.add("rolling");
+  refs.rollStatus.textContent = `${state.activePlayerName} wuerfelt ...`;
 
-  window.clearInterval(animationTimer);
-  let count = 0;
-  const maxCount = 10;
-
-  refs.rollStatus.textContent = `${state.activePlayerName} würfelt ...`;
-
-  animationTimer = window.setInterval(() => {
-    const randomOne = Math.floor(Math.random() * 6) + 1;
-    const randomTwo = Math.floor(Math.random() * 6) + 1;
-    refs.w1.src = `/static/dice/${randomOne}.png`;
-    refs.w2.src = `/static/dice/${randomTwo}.png`;
-    count += 1;
-
-    if (count >= maxCount) {
-      window.clearInterval(animationTimer);
+  diceTimer = window.setInterval(() => {
+    refs.w1.src = `/static/dice/${Math.floor(Math.random() * 6) + 1}.png`;
+    refs.w2.src = `/static/dice/${Math.floor(Math.random() * 6) + 1}.png`;
+    ticks += 1;
+    if (ticks >= 11) {
+      window.clearInterval(diceTimer);
       refs.w1.src = `/static/dice/${roll[0]}.png`;
       refs.w2.src = `/static/dice/${roll[1]}.png`;
-      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewürfelt.`;
+      refs.diceDisplay.classList.remove("rolling");
+      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
     }
-  }, 75);
+  }, 65);
 }
 
 function openDrawer(key) {
   closeDrawer();
   const drawer = refs.drawers[key];
-  if (!drawer) {
-    return;
-  }
-
+  if (!drawer) return;
   drawer.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
   refs.drawerScrim.classList.add("open");
@@ -553,18 +461,13 @@ function openDrawer(key) {
 
 function closeDrawer(key = null) {
   if (key && activeDrawer !== key) {
-    const drawer = refs.drawers[key];
-    if (drawer) {
-      drawer.classList.remove("open");
-      drawer.setAttribute("aria-hidden", "true");
-    }
+    refs.drawers[key]?.classList.remove("open");
+    refs.drawers[key]?.setAttribute("aria-hidden", "true");
     return;
   }
-
   DRAWER_KEYS.forEach((drawerKey) => {
-    const drawer = refs.drawers[drawerKey];
-    drawer.classList.remove("open");
-    drawer.setAttribute("aria-hidden", "true");
+    refs.drawers[drawerKey].classList.remove("open");
+    refs.drawers[drawerKey].setAttribute("aria-hidden", "true");
   });
   refs.drawerScrim.classList.remove("open");
   refs.drawerScrim.setAttribute("aria-hidden", "true");
@@ -572,50 +475,43 @@ function closeDrawer(key = null) {
 }
 
 function toggleDrawer(key) {
-  if (activeDrawer === key) {
-    closeDrawer();
-    return;
-  }
-  openDrawer(key);
+  activeDrawer === key ? closeDrawer() : openDrawer(key);
 }
 
 function closeFieldModal() {
   selectedFieldId = null;
   renderModal();
+  renderBoardGrid();
   renderBoardInsights();
 }
 
 function showFieldInfo(fieldId) {
   selectedFieldId = fieldId;
   renderModal();
+  renderBoardGrid();
   renderBoardInsights();
 }
 
 function showPendingField() {
-  if (!state.popupFeld) {
-    return;
-  }
-
+  if (!state.popupFeld) return;
   selectedFieldId = state.popupFeld.feld_id;
   renderModal();
+  renderBoardGrid();
   renderBoardInsights();
 }
 
 async function handleRoll() {
-  if (busy) {
-    return;
-  }
-
+  if (busy) return;
   setBusy(true);
   try {
     const data = await postJson("/zug_wuerfeln");
     setState(data.state, { toast: data.state.lastEvent });
-    lastStateSignature = getStateSignature(data.state);
+    lastSignature = getStateSignature(data.state);
     animateDice(data.state.displayRoll);
   } catch (error) {
     if (error.state) {
       setState(error.state);
-      lastStateSignature = getStateSignature(error.state);
+      lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
   } finally {
@@ -624,22 +520,16 @@ async function handleRoll() {
 }
 
 async function handleMove() {
-  if (busy) {
-    return;
-  }
-
+  if (busy) return;
   setBusy(true);
   try {
     const data = await postJson("/zug_ziehen");
-    setState(data.state, {
-      openPending: true,
-      toast: data.state.lastEvent,
-    });
-    lastStateSignature = getStateSignature(data.state);
+    setState(data.state, { openPending: true, toast: data.state.lastEvent });
+    lastSignature = getStateSignature(data.state);
   } catch (error) {
     if (error.state) {
       setState(error.state);
-      lastStateSignature = getStateSignature(error.state);
+      lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
   } finally {
@@ -648,22 +538,16 @@ async function handleMove() {
 }
 
 async function handleFieldAction(action, fieldId) {
-  if (busy) {
-    return;
-  }
-
+  if (busy) return;
   setBusy(true);
   try {
     const data = await postJson("/feld_aktion", { aktion: action, feld: fieldId });
-    setState(data.state, {
-      closeModal: true,
-      toast: data.state.lastEvent,
-    });
-    lastStateSignature = getStateSignature(data.state);
+    setState(data.state, { closeModal: true, toast: data.state.lastEvent });
+    lastSignature = getStateSignature(data.state);
   } catch (error) {
     if (error.state) {
       setState(error.state);
-      lastStateSignature = getStateSignature(error.state);
+      lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
   } finally {
@@ -693,6 +577,7 @@ function cacheRefs() {
   refs.toast = document.getElementById("toast");
   refs.w1 = document.getElementById("w1");
   refs.w2 = document.getElementById("w2");
+  refs.diceDisplay = document.getElementById("diceDisplay");
   refs.drawerScrim = document.getElementById("drawerScrim");
   refs.drawers = {
     players: document.getElementById("playersPanel"),
@@ -711,14 +596,10 @@ function cacheRefs() {
 function bindEvents() {
   refs.currentFieldButton.addEventListener("click", showPendingField);
   refs.modal.addEventListener("click", (event) => {
-    if (event.target === refs.modal) {
-      closeFieldModal();
-    }
+    if (event.target === refs.modal) closeFieldModal();
   });
   refs.drawerScrim.addEventListener("click", () => closeDrawer());
-  DRAWER_KEYS.forEach((key) => {
-    refs.drawerButtons[key].addEventListener("click", () => toggleDrawer(key));
-  });
+  DRAWER_KEYS.forEach((key) => refs.drawerButtons[key].addEventListener("click", () => toggleDrawer(key)));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeFieldModal();
@@ -731,9 +612,8 @@ function bootBoard() {
   cacheRefs();
   bindEvents();
   renderApp();
-  lastStateSignature = getStateSignature(state);
-  statePollTimer = window.setInterval(() => refreshState(), 1000);
-
+  lastSignature = getStateSignature(state);
+  pollTimer = window.setInterval(() => refreshState(), 1000);
   if (state.phase === "field_action" && state.popupFeld) {
     selectedFieldId = state.popupFeld.feld_id;
     renderModal();

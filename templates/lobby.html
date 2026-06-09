@@ -3,233 +3,151 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spaßmonopoly Deluxe - Lobby</title>
+  <title>Spassmonopoly Deluxe - Lobby</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
     .lobby-shell {
-      width: min(100%, 600px);
-      margin: 0 auto;
+      width: min(100%, 680px);
     }
 
     .lobby-card {
-      background: var(--panel);
-      border: 3px solid var(--panel-border);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
-      padding: 36px;
+      padding: clamp(20px, 4vw, 36px);
     }
 
-    .lobby-section {
-      margin-bottom: 28px;
-    }
-
-    .lobby-section h2 {
-      margin-bottom: 16px;
-      font-size: 1.3rem;
-    }
-
-    .join-form {
-      display: flex;
-      gap: 12px;
+    .lobby-header {
+      display: grid;
+      gap: 8px;
+      justify-items: start;
       margin-bottom: 24px;
     }
 
+    .lobby-header h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+    }
+
+    .lobby-actions,
+    .join-form {
+      display: flex;
+      gap: 10px;
+    }
+
+    .lobby-actions {
+      margin: 18px 0 24px;
+    }
+
+    .lobby-actions form,
+    .lobby-actions button,
     .join-form input {
       flex: 1;
-      border: 3px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 14px 16px;
-      background: #ffffff;
-      color: var(--text-dark);
-      font-size: 1rem;
     }
 
-    .join-form button {
-      padding: 14px 24px;
-      border: none;
-      border-radius: 16px;
-      background: var(--accent-yellow);
-      color: var(--text-dark);
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow);
-    }
-
-    .join-form button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
+    .lobby-section {
+      display: grid;
+      gap: 12px;
+      margin-top: 20px;
     }
 
     .players-list {
       display: grid;
-      gap: 12px;
-      margin-bottom: 24px;
+      gap: 10px;
     }
 
     .player-item {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
       align-items: center;
-      justify-content: space-between;
-      padding: 16px;
-      background: #fff;
-      border: 2px solid var(--panel-border);
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(23, 32, 45, 0.12);
       border-radius: var(--radius-md);
-      transition: background 0.2s;
+      background: rgba(255, 255, 255, 0.76);
+      box-shadow: var(--shadow-soft);
     }
 
     .player-item.ready {
-      background: #f0ffe0;
+      border-color: rgba(73, 184, 115, 0.42);
+      background: rgba(232, 249, 238, 0.92);
     }
 
     .player-name {
-      font-weight: 600;
-      color: var(--text-dark);
-      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 900;
     }
 
     .player-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
+      padding: 5px 9px;
       border-radius: 999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      background: #ffe0e0;
-      color: #c41e3a;
+      background: rgba(223, 155, 41, 0.15);
+      color: #7a4f08;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-transform: uppercase;
     }
 
     .player-status.ready {
-      background: #e0ffe0;
-      color: #2d7a2d;
+      background: rgba(73, 184, 115, 0.16);
+      color: #196b39;
     }
 
     .player-ready-btn {
-      margin-left: 12px;
-      padding: 10px 16px;
-      border: 2px solid var(--panel-border);
-      border-radius: 12px;
-      background: white;
-      color: var(--text-dark);
-      font-weight: 700;
-      font-size: 0.9rem;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid rgba(23, 32, 45, 0.18);
+      border-radius: var(--radius-md);
+      background: #ffffff;
+      color: var(--ink);
+      font-weight: 900;
       cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .player-ready-btn:hover {
-      background: var(--accent-yellow);
     }
 
     .player-ready-btn.ready {
-      background: var(--accent-green);
-      border-color: var(--accent-green);
-      color: white;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 24px;
-      color: var(--text-soft);
-    }
-
-    .lobby-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 24px;
-    }
-
-    .primary-btn, .secondary-btn {
-      flex: 1;
-      padding: 16px 24px;
-      border: 3px solid var(--panel-border);
-      border-radius: var(--radius-md);
-      font-weight: 700;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow);
-    }
-
-    .primary-btn {
-      background: var(--accent-yellow);
-      color: var(--text-dark);
-    }
-
-    .primary-btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
-    }
-
-    .primary-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .secondary-btn {
-      background: var(--panel);
-      color: var(--text-dark);
-      border-color: var(--panel-border);
-    }
-
-    .secondary-btn:hover {
-      transform: translateY(-2px);
+      background: var(--good);
+      color: #ffffff;
     }
 
     .status-message {
-      padding: 12px 16px;
+      padding: 11px 12px;
       border-radius: var(--radius-md);
-      font-weight: 600;
-      margin-bottom: 16px;
-    }
-
-    .status-message.info {
-      background: #e3f2fd;
-      color: #1976d2;
-      border: 2px solid #1976d2;
+      background: rgba(75, 143, 232, 0.12);
+      color: #1d4f96;
+      font-weight: 850;
     }
 
     .status-message.success {
-      background: #e8f5e9;
-      color: #388e3c;
-      border: 2px solid #388e3c;
+      background: rgba(73, 184, 115, 0.14);
+      color: #196b39;
     }
 
     .status-message.warning {
-      background: #fff3e0;
-      color: #f57c00;
-      border: 2px solid #f57c00;
+      background: rgba(216, 76, 76, 0.12);
+      color: #8b2222;
     }
 
-    .lobby-header {
+    .empty-state {
+      padding: 16px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.6);
+      color: var(--muted);
       text-align: center;
-      margin-bottom: 32px;
     }
 
-    .lobby-header h1 {
-      font-size: 2rem;
-      margin: 0 0 8px;
-    }
+    @media (max-width: 620px) {
+      .lobby-actions,
+      .join-form {
+        flex-direction: column;
+      }
 
-    .lobby-header .hero-badge {
-      justify-content: center;
-      margin-bottom: 12px;
-    }
+      .player-item {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
 
-    .loading {
-      display: inline-block;
-      width: 4px;
-      height: 4px;
-      background: currentColor;
-      border-radius: 50%;
-      animation: pulse 1.5s infinite;
-      margin: 0 2px;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 1; }
+      .player-ready-btn {
+        grid-column: 1 / -1;
+      }
     }
   </style>
 </head>
@@ -237,19 +155,19 @@
   <main class="lobby-shell">
     <section class="lobby-card">
       <div class="lobby-header">
-        <div class="hero-badge" style="justify-content: center;">Warteraum</div>
-        <h1>Spaßmonopoly Deluxe</h1>
-        <p class="panel-copy">Wartet hier, bis sich alle Spieler verbunden haben und bereit sind.</p>
+        <div class="hero-badge">Warteraum</div>
+        <h1>Spassmonopoly Deluxe</h1>
+        <p class="panel-copy">Tritt bei, setze dich bereit und starte die Runde, sobald mindestens zwei Spieler bereit sind.</p>
       </div>
 
-      <div class="lobby-actions" style="margin-bottom: 24px;">
-        <form method="post" action="{{ url_for('lobby_continue') }}" style="flex: 1;">
-          <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
+      <div class="lobby-actions">
+        <form method="post" action="{{ url_for('lobby_continue') }}">
+          <button type="submit" class="primary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>
             Letzte Runde fortsetzen
           </button>
         </form>
-        <form method="post" action="{{ url_for('lobby_new') }}" style="flex: 1;">
-          <button type="submit" class="secondary-btn">Neue Runde</button>
+        <form method="post" action="{{ url_for('lobby_new') }}">
+          <button type="submit" class="secondary-btn full-width">Neue Runde</button>
         </form>
       </div>
 
@@ -258,32 +176,21 @@
       <div class="lobby-section" id="joinSection">
         <h2>Dem Spiel beitreten</h2>
         <form class="join-form" onsubmit="joinGame(event)">
-          <input 
-            type="text" 
-            id="playerName" 
-            placeholder="Dein Name..." 
-            required 
-            maxlength="20"
-            autocomplete="off"
-          >
-          <button type="submit">Beitreten</button>
+          <input type="text" id="playerName" placeholder="Dein Name" required maxlength="24" autocomplete="off">
+          <button type="submit" class="primary-btn">Beitreten</button>
         </form>
       </div>
 
       <div class="lobby-section">
         <h2>Spieler online (<span id="playerCount">0</span>)</h2>
         <div id="playersList" class="players-list">
-          <div class="empty-state">Noch keine Spieler verbunden. Starten Sie jetzt!</div>
+          <div class="empty-state">Noch keine Spieler verbunden.</div>
         </div>
       </div>
 
       <div class="lobby-actions">
-        <button id="startBtn" class="primary-btn" onclick="startGame()" disabled>
-          Spiel starten
-        </button>
-        <button id="refreshBtn" class="secondary-btn" onclick="updateLobby()">
-          Aktualisieren
-        </button>
+        <button id="startBtn" class="primary-btn" onclick="startGame()" disabled>Spiel starten</button>
+        <button id="refreshBtn" class="secondary-btn" onclick="updateLobby()">Aktualisieren</button>
       </div>
     </section>
   </main>
@@ -291,168 +198,146 @@
   <script>
     let currentPlayerId = {{ current_player_id|tojson }};
     let autoRefreshInterval = null;
-    let autoStartRequested = false;
 
     function escapeHtml(value) {
-      return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     }
 
-    function showStatus(message, type = 'info') {
-      const msgEl = document.getElementById('statusMessage');
-      const status = document.createElement('div');
+    function showStatus(message, type = "info") {
+      const msgEl = document.getElementById("statusMessage");
+      const status = document.createElement("div");
       status.className = `status-message ${type}`;
       status.textContent = message;
       msgEl.replaceChildren(status);
-      setTimeout(() => {
-        msgEl.replaceChildren();
-      }, 5000);
+      window.setTimeout(() => msgEl.replaceChildren(), 5000);
     }
 
     async function joinGame(event) {
       event.preventDefault();
-      const name = document.getElementById('playerName').value.trim();
-      
+      const input = document.getElementById("playerName");
+      const name = input.value.trim();
       if (!name) {
-        showStatus('Bitte gib deinen Namen ein', 'warning');
+        showStatus("Bitte gib deinen Namen ein.", "warning");
         return;
       }
 
       try {
-        const response = await fetch('/lobby/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `name=${encodeURIComponent(name)}`
+        const response = await fetch("/lobby/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `name=${encodeURIComponent(name)}`,
         });
-
         const data = await response.json();
-        if (data.ok) {
-          currentPlayerId = data.player_id;
-          if (data.game_started) {
-            window.location.href = data.redirect_url || '/board';
-            return;
-          }
-          document.getElementById('joinSection').style.display = 'none';
-          showStatus(`Willkommen ${name}! Bitte warte, bis alle Spieler bereit sind.`, 'success');
-          updateLobby();
-          startAutoRefresh();
-        } else {
-          showStatus(data.msg || 'Fehler beim Beitreten', 'warning');
+        if (!data.ok) {
+          showStatus(data.msg || "Beitritt fehlgeschlagen.", "warning");
+          return;
         }
-      } catch (err) {
-        showStatus('Verbindungsfehler', 'warning');
+        currentPlayerId = data.player_id;
+        if (data.game_started) {
+          window.location.href = data.redirect_url || "/board";
+          return;
+        }
+        document.getElementById("joinSection").style.display = "none";
+        showStatus(`Willkommen ${name}. Setze dich bereit, sobald du startklar bist.`, "success");
+        await updateLobby();
+        startAutoRefresh();
+      } catch (error) {
+        showStatus("Verbindungsfehler beim Beitreten.", "warning");
       }
     }
 
     async function updateLobby() {
       try {
-        const response = await fetch('/lobby/state');
+        const response = await fetch("/lobby/state");
         const data = await response.json();
+        if (!data.ok) throw new Error(data.msg || "Lobby konnte nicht geladen werden.");
 
-        // Update player list
-        const playersList = document.getElementById('playersList');
-        const playerCount = document.getElementById('playerCount');
+        const playersList = document.getElementById("playersList");
+        const playerCount = document.getElementById("playerCount");
         playerCount.textContent = data.players.length;
 
-        if (data.players.length === 0) {
-          playersList.innerHTML = '<div class="empty-state">Noch keine Spieler verbunden.</div>';
-          document.getElementById('startBtn').disabled = true;
-          return;
-        }
-
         if (data.game_started && currentPlayerId) {
-          window.location.href = data.redirect_url || '/board';
+          window.location.href = data.redirect_url || "/board";
           return;
         }
 
-        playersList.innerHTML = '';
-        data.players.forEach(player => {
-          const isCurrentPlayer = currentPlayerId === player.id;
-          const readyClass = player.ready ? 'ready' : '';
-          const statusText = player.ready ? 'Bereit' : 'Wartet...';
-          const statusClass = player.ready ? 'ready' : '';
+        if (!data.players.length) {
+          playersList.innerHTML = '<div class="empty-state">Noch keine Spieler verbunden.</div>';
+          document.getElementById("startBtn").disabled = true;
+          return;
+        }
 
-          const playerEl = document.createElement('div');
-          playerEl.className = `player-item ${readyClass}`;
-          playerEl.innerHTML = `
+        playersList.innerHTML = "";
+        data.players.forEach((player) => {
+          const isCurrentPlayer = currentPlayerId === player.id;
+          const readyClass = player.ready ? "ready" : "";
+          const item = document.createElement("div");
+          item.className = `player-item ${readyClass}`;
+          item.innerHTML = `
             <span class="player-name">${escapeHtml(player.name)}</span>
-            <span class="player-status ${statusClass}">${statusText}</span>
-            ${isCurrentPlayer ? `<button class="player-ready-btn ${readyClass}" onclick="toggleReady()">
-              ${player.ready ? 'Bereit' : 'Bereit setzen'}
-            </button>` : ''}
+            <span class="player-status ${readyClass}">${player.ready ? "Bereit" : "Wartet"}</span>
+            ${isCurrentPlayer ? `<button class="player-ready-btn ${readyClass}" onclick="toggleReady()">${player.ready ? "Bereit" : "Bereit setzen"}</button>` : ""}
           `;
-          playersList.appendChild(playerEl);
+          playersList.appendChild(item);
         });
 
-        const startBtn = document.getElementById('startBtn');
+        const startBtn = document.getElementById("startBtn");
         startBtn.disabled = data.game_started || !data.all_ready || data.players.length < 2;
-        startBtn.textContent = data.game_started
-          ? 'Spiel läuft'
-          : (data.all_ready && data.players.length >= 2 ? 'Spiel startet...' : 'Spiel starten');
-
-        if (!data.game_started && data.all_ready && data.players.length >= 2 && currentPlayerId && !autoStartRequested) {
-          autoStartRequested = true;
-          startGame();
-        }
-      } catch (err) {
-        console.error('Fehler beim Aktualisieren:', err);
+        startBtn.textContent = data.game_started ? "Spiel laeuft" : "Spiel starten";
+      } catch (error) {
+        showStatus(error.message || "Lobby-Update fehlgeschlagen.", "warning");
       }
     }
 
     async function toggleReady() {
       if (!currentPlayerId) return;
-
       try {
-        const response = await fetch('/lobby/ready', {
-          method: 'POST'
-        });
-
+        const response = await fetch("/lobby/ready", { method: "POST" });
         const data = await response.json();
-        if (data.ok) {
-          updateLobby();
+        if (!data.ok) {
+          showStatus(data.msg || "Status konnte nicht geaendert werden.", "warning");
+          return;
         }
-      } catch (err) {
-        showStatus('Fehler beim Ändern des Status', 'warning');
+        await updateLobby();
+      } catch (error) {
+        showStatus("Bereit-Status konnte nicht geaendert werden.", "warning");
       }
     }
 
     async function startGame() {
-      const startBtn = document.getElementById('startBtn');
+      const startBtn = document.getElementById("startBtn");
       startBtn.disabled = true;
-      startBtn.textContent = 'Spiel startet...';
-
+      startBtn.textContent = "Startet...";
       try {
-        const response = await fetch('/lobby/start', {
-          method: 'POST'
-        });
-
+        const response = await fetch("/lobby/start", { method: "POST" });
         const data = await response.json();
-        if (data.ok) {
-          showStatus('Spiel wird gestartet...', 'success');
-          setTimeout(() => {
-            window.location.href = data.redirect_url || '/board';
-          }, 500);
-        } else {
-          autoStartRequested = false;
-          showStatus(data.msg || 'Fehler beim Starten', 'warning');
+        if (!data.ok) {
+          showStatus(data.msg || "Start fehlgeschlagen.", "warning");
+          await updateLobby();
+          return;
         }
-      } catch (err) {
-        autoStartRequested = false;
-        showStatus('Verbindungsfehler', 'warning');
+        showStatus("Spiel wird geoeffnet.", "success");
+        window.setTimeout(() => {
+          window.location.href = data.redirect_url || "/board";
+        }, 400);
+      } catch (error) {
+        showStatus("Verbindungsfehler beim Starten.", "warning");
+        await updateLobby();
       }
     }
 
     function startAutoRefresh() {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-      autoRefreshInterval = setInterval(updateLobby, 1000);
+      if (autoRefreshInterval) window.clearInterval(autoRefreshInterval);
+      autoRefreshInterval = window.setInterval(updateLobby, 1000);
     }
 
-    // Initial load
     updateLobby();
+    startAutoRefresh();
   </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-from .game_engine import get_field_type
+from .game_engine import clean_display_text, get_field_type, normalize_event_log
 
 
 def get_popup_hint(field):
@@ -67,8 +67,10 @@ def get_scoreboard(game_state):
         current_field = fields[position_index]
         scoreboard.append(
             {
+                "id": player.get("id"),
                 "name": player["name"],
                 "position": current_field["name"],
+                "positionIndex": position_index,
                 "drinks": player.get("action_points", 0),
                 "steps": player.get("total_steps", 0),
                 "properties": owner_counts.get(player["name"], 0),
@@ -111,6 +113,9 @@ def build_game_payload(game_state, current_player_id=None):
     active_index = game_state.get("active_player_index", 0)
     current_player_index = get_current_player_index(game_state, current_player_id)
     lobby_mode = game_state.get("room", {}).get("mode") == "lobby"
+    game_status = game_state.get("game", {}).get("status", "running")
+    event_log = normalize_event_log(game_state.get("event_log", []))
+    last_event_entry = game_state.get("last_event_entry") or (event_log[-1] if event_log else None)
 
     popup_field = None
     popup_player = None
@@ -131,7 +136,7 @@ def build_game_payload(game_state, current_player_id=None):
         "spieler": [player["name"] for player in players],
         "aktiver": active_index,
         "currentPlayerIndex": current_player_index,
-        "canAct": True if not lobby_mode else current_player_index == active_index,
+        "canAct": (game_status != "finished") and (True if not lobby_mode else current_player_index == active_index),
         "activePlayerName": get_active_player_name(game_state),
         "felder": fields,
         "positionen": [player.get("position", 0) for player in players],
@@ -147,8 +152,9 @@ def build_game_payload(game_state, current_player_id=None):
         "ownership": get_ownership_summary(fields),
         "highlights": get_game_highlights(game_state),
         "phase": game_state.get("game", {}).get("phase", "roll"),
-        "gameStatus": game_state.get("game", {}).get("status", "running"),
-        "lastEvent": game_state.get("last_event"),
-        "eventLog": game_state.get("event_log", []),
+        "gameStatus": game_status,
+        "lastEvent": clean_display_text(game_state.get("last_event")),
+        "lastEventEntry": last_event_entry,
+        "eventLog": event_log,
     }
 

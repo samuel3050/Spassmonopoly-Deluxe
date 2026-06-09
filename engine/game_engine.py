@@ -2,6 +2,8 @@ import copy
 import random
 import re
 import unicodedata
+from datetime import datetime
+from uuid import uuid4
 
 
 APP_NAME = "Spassmonopoly Deluxe"
@@ -41,23 +43,64 @@ GEMEINSCHAFT_EFFECTS = [
     {"message": "Nichts passiert. Atmet tief durch."},
 ]
 
+DISPLAY_REPLACEMENTS = {
+    "\u00c3\u0178": "ss",
+    "\u00c3\u00a4": "ae",
+    "\u00c3\u00b6": "oe",
+    "\u00c3\u00bc": "ue",
+    "\u00c3\u201e": "Ae",
+    "\u00c3\u2013": "Oe",
+    "\u00c3\u0152": "Ue",
+    "\u00c3\u0192\u00c5\u00b8": "ss",
+    "\u00c3\u0192\u00c2\u00a4": "ae",
+    "\u00c3\u0192\u00c2\u00b6": "oe",
+    "\u00c3\u0192\u00c2\u00bc": "ue",
+    "\u00c3\u0192\u00e2\u20ac\u017e": "Ae",
+    "\u00c3\u0192\u00e2\u20ac\u201c": "Oe",
+    "\u00c3\u0192\u00c5\u201c": "Ue",
+    "\u00e2\u20ac\u201d": "-",
+    "\u00c2\u00b7": "-",
+    "\u00c2": "",
+    "\u00e4": "ae",
+    "\u00f6": "oe",
+    "\u00fc": "ue",
+    "\u00c4": "Ae",
+    "\u00d6": "Oe",
+    "\u00dc": "Ue",
+    "\u00df": "ss",
+}
+
 
 def normalize_text(value):
     text = str(value or "").strip().lower()
     replacements = {
-        "ß": "ss",
-        "ä": "a",
-        "ö": "o",
-        "ü": "u",
-        "ÃŸ": "ss",
-        "Ã¤": "a",
-        "Ã¶": "o",
-        "Ã¼": "u",
+        "\u00df": "ss",
+        "\u00e4": "a",
+        "\u00f6": "o",
+        "\u00fc": "u",
+        "\u00c3\u0178": "ss",
+        "\u00c3\u00a4": "a",
+        "\u00c3\u00b6": "o",
+        "\u00c3\u00bc": "u",
+        "\u00c3\u0192\u00c5\u00b8": "ss",
+        "\u00c3\u0192\u00c2\u00a4": "a",
+        "\u00c3\u0192\u00c2\u00b6": "o",
+        "\u00c3\u0192\u00c2\u00bc": "u",
     }
     for search, replacement in replacements.items():
         text = text.replace(search, replacement)
     text = unicodedata.normalize("NFKD", text)
     return "".join(char for char in text if not unicodedata.combining(char))
+
+
+def clean_display_text(value):
+    """Return stable ASCII display text for saved data that may contain mojibake."""
+    if value is None:
+        return None
+    text = str(value)
+    for search, replacement in DISPLAY_REPLACEMENTS.items():
+        text = text.replace(search, replacement)
+    return text
 
 
 def parse_number(text):
@@ -83,22 +126,58 @@ def ensure_field_shape(fields):
         normalized.append(
             {
                 "feld_id": int(field["feld_id"]),
-                "name": field.get("name", ""),
-                "typ": field.get("typ", ""),
-                "kaufpreis": field.get("kaufpreis"),
-                "miete": field.get("miete"),
-                "farbe": field.get("farbe", "Dunkelgrau"),
+                "name": clean_display_text(field.get("name", "")),
+                "typ": clean_display_text(field.get("typ", "")),
+                "kaufpreis": clean_display_text(field.get("kaufpreis")),
+                "miete": clean_display_text(field.get("miete")),
+                "farbe": clean_display_text(field.get("farbe", "Dunkelgrau")),
                 "farbe_css": COLOR_MAP.get(normalize_text(field.get("farbe")), "#9fb7a3"),
-                "alkohol_typ": field.get("alkohol_typ", "Bonus"),
-                "alkohol_menge": field.get("alkohol_menge", "0"),
-                "zusatz_regel": field.get("zusatz_regel"),
-                "besitzer": field.get("besitzer"),
+                "alkohol_typ": clean_display_text(field.get("alkohol_typ", "Bonus")),
+                "alkohol_menge": clean_display_text(field.get("alkohol_menge", "0")),
+                "zusatz_regel": clean_display_text(field.get("zusatz_regel")),
+                "besitzer": clean_display_text(field.get("besitzer")),
                 "owner_player_id": field.get("owner_player_id"),
                 "index": index,
                 "ist_kaufbar": can_be_purchased(field),
             }
         )
     return normalized
+
+
+def event_now():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def make_event(message, event_type="info", severity="info", player_id=None, field_id=None, data=None):
+    return {
+        "id": str(uuid4()),
+        "timestamp": event_now(),
+        "type": event_type,
+        "severity": severity,
+        "player_id": player_id,
+        "field_id": field_id,
+        "message": clean_display_text(message),
+        "data": data or {},
+    }
+
+
+def normalize_event(entry):
+    if isinstance(entry, dict):
+        normalized = dict(entry)
+        normalized.setdefault("id", str(uuid4()))
+        normalized.setdefault("timestamp", event_now())
+        normalized.setdefault("type", "info")
+        normalized.setdefault("severity", "info")
+        normalized.setdefault("player_id", None)
+        normalized.setdefault("field_id", None)
+        normalized.setdefault("data", {})
+        normalized["message"] = clean_display_text(normalized.get("message", ""))
+        return normalized
+    return make_event(str(entry), event_type="legacy", severity="info")
+
+
+def normalize_event_log(entries):
+    return [normalize_event(entry) for entry in list(entries or [])][-80:]
 
 
 def init_game(config):
@@ -113,7 +192,7 @@ def init_game(config):
 
     players = []
     for index, raw_name in enumerate(player_names):
-        name = str(raw_name or "").strip() or f"Spieler {index + 1}"
+        name = clean_display_text(str(raw_name or "").strip()) or f"Spieler {index + 1}"
         players.append(
             {
                 "id": f"player-{index + 1}",
@@ -137,9 +216,7 @@ def init_game(config):
         "players": players,
         "turn_order": list(range(len(players))),
         "active_player_index": 0,
-        "board": {
-            "fields": fields,
-        },
+        "board": {"fields": fields},
         "dice": {
             "current_roll": None,
             "last_roll": None,
@@ -149,7 +226,13 @@ def init_game(config):
         "last_event": None,
         "event_log": [],
     }
-    return push_event(state, f"{players[0]['name']} eroeffnet Runde 1.")
+    return push_event(
+        state,
+        f"Spielstart: {players[0]['name']} eroeffnet Runde 1.",
+        event_type="game_start",
+        severity="success",
+        player_id=players[0]["id"],
+    )
 
 
 def get_active_player(state):
@@ -160,12 +243,14 @@ def get_active_player(state):
     return active_index, players[active_index]
 
 
-def push_event(game_state, message):
+def push_event(game_state, message, event_type="info", severity="info", player_id=None, field_id=None, data=None):
     state = copy.deepcopy(game_state)
-    history = list(state.get("event_log", []))
-    history.insert(0, message)
-    state["event_log"] = history[:10]
-    state["last_event"] = message
+    history = normalize_event_log(state.get("event_log", []))
+    event = make_event(message, event_type, severity, player_id, field_id, data)
+    history.append(event)
+    state["event_log"] = history[-80:]
+    state["last_event"] = event["message"]
+    state["last_event_entry"] = event
     return state
 
 
@@ -178,8 +263,14 @@ def _require_phase(state, expected_phase, message):
         raise ValueError(message)
 
 
+def _require_running(state):
+    if state.get("game", {}).get("status") == "finished":
+        raise ValueError("Diese Runde ist beendet. Starte eine neue Runde, um weiterzuspielen.")
+
+
 def roll_dice(game_state, dice=None, rng=None):
     state = copy.deepcopy(game_state)
+    _require_running(state)
     _require_phase(state, "roll", "Der aktuelle Zug muss zuerst abgeschlossen werden.")
     if state.get("pending_action"):
         raise ValueError("Bitte zuerst das aktuelle Feld auswerten.")
@@ -205,11 +296,19 @@ def roll_dice(game_state, dice=None, rng=None):
     )
     state["dice"]["history"] = state["dice"]["history"][:20]
     _set_phase(state, "move")
-    return push_event(state, f"{active_player['name']} hat {sum(roll)} gewuerfelt.")
+    return push_event(
+        state,
+        f"{active_player['name']} wuerfelt {sum(roll)} ({roll[0]} + {roll[1]}).",
+        event_type="dice_roll",
+        severity="info",
+        player_id=active_player["id"],
+        data={"roll": roll, "total": sum(roll)},
+    )
 
 
 def move_player(game_state, steps=None):
     state = copy.deepcopy(game_state)
+    _require_running(state)
     _require_phase(state, "move", "Es gibt gerade keinen bestaetigten Wurf zum Ziehen.")
     active_index, active_player = get_active_player(state)
 
@@ -225,7 +324,8 @@ def move_player(game_state, steps=None):
         raise ValueError("Das Spielfeld ist leer.")
 
     movement = int(steps)
-    active_player["position"] = (int(active_player.get("position", 0)) + movement) % len(fields)
+    start_position = int(active_player.get("position", 0))
+    active_player["position"] = (start_position + movement) % len(fields)
     active_player["total_steps"] = int(active_player.get("total_steps", 0)) + movement
     state["players"][active_index] = active_player
     state["pending_action"] = {
@@ -237,7 +337,15 @@ def move_player(game_state, steps=None):
     }
     state["dice"]["current_roll"] = None
     _set_phase(state, "field_action")
-    return push_event(state, f"{active_player['name']} zieht auf {fields[active_player['position']]['name']}.")
+    return push_event(
+        state,
+        f"{active_player['name']} zieht von Feld {start_position + 1} auf Feld {active_player['position'] + 1}: {fields[active_player['position']]['name']}.",
+        event_type="movement",
+        severity="info",
+        player_id=active_player["id"],
+        field_id=fields[active_player["position"]]["feld_id"],
+        data={"from": start_position, "to": active_player["position"], "steps": movement},
+    )
 
 
 def apply_non_property_effect(state, field, active_index):
@@ -282,6 +390,7 @@ def apply_non_property_effect(state, field, active_index):
 
 def apply_field_effect(game_state, action="skip", field_id=None):
     state = copy.deepcopy(game_state)
+    _require_running(state)
     _require_phase(state, "field_action", "Kein aktiver Zug vorhanden.")
     pending = state.get("pending_action")
     if not pending:
@@ -311,9 +420,12 @@ def apply_field_effect(game_state, action="skip", field_id=None):
         field["owner_player_id"] = active_player["id"]
         clamp_points(active_player, parse_number(field.get("kaufpreis")))
         message = f"{active_player['name']} sichert sich {field['name']} fuer {field.get('kaufpreis') or '0'}."
+        event_type = "field_purchase"
+        severity = "success"
 
     elif action == "miete":
-        if not field.get("besitzer") or field.get("owner_player_id") == active_player["id"] or field["besitzer"] == active_player["name"]:
+        is_own_field = field.get("owner_player_id") == active_player["id"] or field.get("besitzer") == active_player["name"]
+        if not field.get("besitzer") or is_own_field:
             raise ValueError("Auf diesem Feld ist keine Abgabe faellig.")
 
         clamp_points(active_player, parse_number(field.get("miete")))
@@ -321,9 +433,13 @@ def apply_field_effect(game_state, action="skip", field_id=None):
             f"{active_player['name']} bestaetigt auf {field['name']} "
             f"die Abgabe von {field.get('miete') or '0'} an {field['besitzer']}."
         )
+        event_type = "penalty"
+        severity = "warning"
 
     elif action == "skip":
         message = apply_non_property_effect(state, field, active_index)
+        event_type = "card_event" if get_field_type(field) == "gemeinschaft" else "field_effect"
+        severity = "warning" if get_field_type(field) in {"steuer", "gefangnis"} else "info"
 
     else:
         raise ValueError("Unbekannte Aktion.")
@@ -332,12 +448,56 @@ def apply_field_effect(game_state, action="skip", field_id=None):
     state["players"][active_index] = active_player
     state["pending_action"] = None
     _set_phase(state, "roll")
-    state = push_event(state, message)
-    return next_turn(state)
+    state = push_event(
+        state,
+        message,
+        event_type=event_type,
+        severity=severity,
+        player_id=active_player["id"],
+        field_id=field["feld_id"],
+        data={"action": action, "field": field["name"]},
+    )
+    return next_turn(maybe_finish_game(state))
+
+
+def maybe_finish_game(game_state):
+    state = copy.deepcopy(game_state)
+    fields = state.get("board", {}).get("fields", [])
+    buyable_fields = [field for field in fields if field.get("ist_kaufbar")]
+    if not buyable_fields or any(not field.get("besitzer") for field in buyable_fields):
+        return state
+
+    owner_counts = {}
+    for field in buyable_fields:
+        owner_key = field.get("owner_player_id") or field.get("besitzer")
+        owner_counts[owner_key] = owner_counts.get(owner_key, 0) + 1
+
+    players = state.get("players", [])
+    winner = max(
+        players,
+        key=lambda player: (
+            owner_counts.get(player.get("id"), owner_counts.get(player.get("name"), 0)),
+            -int(player.get("action_points", 0)),
+            int(player.get("total_steps", 0)),
+        ),
+    )
+    winner_count = owner_counts.get(winner.get("id"), owner_counts.get(winner.get("name"), 0))
+    state.setdefault("game", {})["status"] = "finished"
+    state["game"]["phase"] = "finished"
+    return push_event(
+        state,
+        f"Gewinner: {winner['name']} gewinnt die Runde mit {winner_count} gesicherten Feldern.",
+        event_type="winner",
+        severity="success",
+        player_id=winner["id"],
+    )
 
 
 def next_turn(game_state):
     state = copy.deepcopy(game_state)
+    if state.get("game", {}).get("status") == "finished":
+        return state
+
     players = state.get("players", [])
     if not players:
         raise ValueError("Das Spiel hat keine Spieler.")
@@ -349,6 +509,18 @@ def next_turn(game_state):
 
     if next_active == 0:
         state["game"]["round"] = int(state["game"].get("round", 1)) + 1
-        return push_event(state, f"Runde {state['game']['round']} beginnt. {players[next_active]['name']} ist am Zug.")
+        return push_event(
+            state,
+            f"Runde {state['game']['round']} beginnt. {players[next_active]['name']} ist am Zug.",
+            event_type="turn_change",
+            severity="info",
+            player_id=players[next_active]["id"],
+        )
 
-    return push_event(state, f"{players[next_active]['name']} ist als Naechstes am Zug.")
+    return push_event(
+        state,
+        f"{players[next_active]['name']} ist als Naechstes am Zug.",
+        event_type="turn_change",
+        severity="info",
+        player_id=players[next_active]["id"],
+    )
