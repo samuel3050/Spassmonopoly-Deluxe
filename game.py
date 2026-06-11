@@ -1,9 +1,11 @@
 import copy
+import json
 import os
 import logging
 import random
 import re
 import string
+import time
 from threading import RLock
 from uuid import uuid4
 
@@ -15,7 +17,7 @@ else:
     load_dotenv()
 
 try:
-    from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+    from flask import Flask, g, has_request_context, jsonify, redirect, render_template, request, session, url_for
 except ImportError as exc:
     raise SystemExit(
         "Flask ist nicht installiert. Bitte führe `pip install -r requirements.txt` im Ordner "
@@ -55,8 +57,12 @@ JOIN_CODE_LENGTH = 6
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
 app.json.ensure_ascii = False
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-app.logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+app.logger.setLevel(LOG_LEVEL)
 
 init_db(app)
 create_tables(app)
@@ -72,6 +78,59 @@ lobby_state = {
     "room_id": ROOM_ID,
 }
 state_lock = RLock()
+
+
+def structured_log(level, event, **fields):
+    request_id = None
+    if has_request_context():
+        request_id = request.environ.get("spass.request_id") or getattr(g, "request_id", None)
+        if not request_id:
+            request_id = request.headers.get("X-Request-ID") or str(uuid4())
+            g.request_id = request_id
+            request.environ["spass.request_id"] = request_id
+    payload = {
+        "event": event,
+        "request_id": request_id,
+        "player_id": session.get("player_id") if has_request_context() else None,
+        "host_id": lobby_state.get("host_id"),
+        **{key: value for key, value in fields.items() if value is not None},
+    }
+    app.logger.log(level, json.dumps(payload, ensure_ascii=False, default=str))
+
+
+@app.before_request
+def attach_request_debug_context():
+    g.request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request.environ["spass.request_id"] = g.request_id
+    g.request_started_at = time.perf_counter()
+    if request.endpoint != "static":
+        structured_log(
+            logging.DEBUG,
+            "request.start",
+            method=request.method,
+            path=request.path,
+            endpoint=request.endpoint,
+            save_id=(request.view_args or {}).get("save_id"),
+        )
+
+
+@app.after_request
+def log_request_debug_context(response):
+    response.headers["X-Request-ID"] = getattr(g, "request_id", "")
+    if request.endpoint != "static":
+        elapsed_ms = int((time.perf_counter() - getattr(g, "request_started_at", time.perf_counter())) * 1000)
+        level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
+        structured_log(
+            level,
+            "request.finish",
+            method=request.method,
+            path=request.path,
+            endpoint=request.endpoint,
+            status=response.status_code,
+            elapsed_ms=elapsed_ms,
+            save_id=(request.view_args or {}).get("save_id"),
+        )
+    return response
 
 
 def make_join_code():
@@ -474,6 +533,14 @@ def redirect_if_game_missing():
 
 
 def json_error(message, status_code=400):
+    structured_log(
+        logging.WARNING if status_code < 500 else logging.ERROR,
+        "response.error",
+        status=status_code,
+        message=message,
+        endpoint=request.endpoint,
+        save_id=(request.view_args or {}).get("save_id"),
+    )
     return jsonify({"ok": False, "msg": message}), status_code
 
 
@@ -578,6 +645,15 @@ def api_load_save(save_id):
             if normalized.get("room", {}).get("mode") == "lobby":
                 bind_session_to_player(normalized, get_host_id(normalized))
             save_game_state(ROOM_ID, normalized)
+            structured_log(
+                logging.INFO,
+                "save.load",
+                save_id=save_id,
+                save_name=game_save.name,
+                game_id=(normalized.get("identity") or {}).get("game_id"),
+                join_code=(normalized.get("identity") or {}).get("join_code"),
+                phase=(normalized.get("game") or {}).get("phase"),
+            )
             return jsonify({
                 "ok": True,
                 "message": f"'{game_save.name}' geladen",
@@ -611,6 +687,14 @@ def api_save_current():
                     named_save = GameSaveService.update_save(existing.id, game_state)
                 else:
                     named_save = GameSaveService.create_save(save_name, game_state, description="Manueller Spielstand")
+            structured_log(
+                logging.INFO,
+                "save.current",
+                save_id=named_save.id if named_save else None,
+                save_name=save_name,
+                phase=(game_state.get("game") or {}).get("phase"),
+                active_player_index=game_state.get("active_player_index"),
+            )
             return jsonify(
                 {
                     "ok": True,
@@ -670,6 +754,7 @@ def api_rename_save(save_id):
             if not game_save:
                 return json_error("Spielstand nicht gefunden", 404)
 
+            structured_log(logging.INFO, "save.rename", save_id=save_id, save_name=new_name)
             return jsonify({
                 "ok": True,
                 "message": f"In '{new_name}' umbenannt",
@@ -700,6 +785,7 @@ def api_delete_save(save_id):
             if not success:
                 return json_error("Spielstand nicht gefunden", 404)
 
+            structured_log(logging.INFO, "save.delete", save_id=save_id, save_name=source_save.name)
             return jsonify({
                 "ok": True,
                 "message": "Spielstand gelöscht",
@@ -730,6 +816,13 @@ def api_duplicate_save(save_id):
             if not game_save:
                 return json_error("Spielstand nicht gefunden", 404)
 
+            structured_log(
+                logging.INFO,
+                "save.duplicate",
+                save_id=save_id,
+                new_save_id=game_save.id,
+                save_name=new_name,
+            )
             return jsonify({
                 "ok": True,
                 "message": f"Nach '{new_name}' dupliziert",

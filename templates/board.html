@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="page page-board theme-{{ settings.theme }}">
-  <main class="game-shell game-shell-studio">
-    <header class="top-dock">
+<body class="page page-board theme-light bg-slate-50 text-slate-900 antialiased">
+  <main class="game-shell game-shell-studio min-h-screen">
+    <header class="top-dock bg-white/95 shadow-sm ring-1 ring-slate-200">
       <div class="dock-brand">
         <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
         <div>
@@ -32,7 +33,7 @@
     </header>
 
     <section class="studio-game-grid" aria-label="Spieloberfläche">
-      <aside class="studio-panel player-command-panel">
+      <aside class="studio-panel player-command-panel bg-white shadow-lg ring-1 ring-slate-200">
         <section class="active-turn-card" aria-live="polite">
           <span class="panel-kicker">Am Zug</span>
           <strong id="centerPlayerName">Bereit</strong>
@@ -94,7 +95,7 @@
         </div>
       </section>
 
-      <aside class="studio-panel action-log-panel">
+      <aside class="studio-panel action-log-panel bg-white shadow-lg ring-1 ring-slate-200">
         <section class="panel-block panel-block-actions">
           <div class="panel-heading compact-heading">
             <div>
@@ -189,6 +190,7 @@
     window.gameData = {{ game_state|tojson }};
     window.appSettings = {{ settings|tojson }};
   </script>
+  <script src="{{ url_for('static', filename='debug.js') }}"></script>
   <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

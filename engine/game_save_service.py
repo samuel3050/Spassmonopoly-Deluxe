@@ -20,7 +20,7 @@ class GameSaveService:
         "effects_volume": "80",
         "muted": "off",
         "animations": "on",
-        "theme": "dark",
+        "theme": "light",
         "speed": "normal",
     }
 

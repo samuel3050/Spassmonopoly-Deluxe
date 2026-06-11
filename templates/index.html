@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="page page-home theme-{{ settings.theme }}">
-  <main class="app-dashboard">
-    <header class="main-menu-header">
+<body class="page page-home theme-light bg-slate-50 text-slate-900 antialiased">
+  <main class="app-dashboard min-h-screen">
+    <header class="main-menu-header bg-white/90 shadow-sm ring-1 ring-slate-200">
       <div class="brand-lockup">
         <div class="brand-mark" aria-hidden="true">SD</div>
         <div>
@@ -27,7 +28,7 @@
     </header>
 
     <section id="play" class="dashboard-grid home-view active" data-home-view="play">
-      <section class="menu-panel primary-menu-panel">
+      <section class="menu-panel primary-menu-panel bg-white shadow-xl ring-1 ring-slate-200">
         <div class="panel-heading">
           <div>
             <div class="hero-badge">Schnellstart</div>
@@ -60,7 +61,7 @@
         </div>
       </section>
 
-      <section class="menu-panel menu-panel-stack">
+      <section class="menu-panel menu-panel-stack bg-white/95 shadow-lg ring-1 ring-slate-200">
         <div class="mini-stat-grid">
           <article class="stat-card">
             <span class="stat-label">Spielstände</span>
@@ -82,7 +83,7 @@
       </section>
     </section>
 
-    <section id="saves" class="save-manager pro-save-manager home-view" data-home-view="saves" aria-labelledby="saveManagerTitle" hidden>
+    <section id="saves" class="save-manager pro-save-manager home-view bg-white shadow-xl ring-1 ring-slate-200" data-home-view="saves" aria-labelledby="saveManagerTitle" hidden>
       <div class="save-manager-heading">
         <div>
           <div class="hero-badge">Save Manager</div>
@@ -91,10 +92,15 @@
         <input id="saveSearch" class="save-search" type="search" placeholder="Nach Name oder Datum suchen" autocomplete="off">
       </div>
 
-      {% if saves %}
-      <div id="saveList" class="save-list save-list-pro">
+      <div id="saveEmptyState" class="empty-product-state {% if saves %}hidden{% endif %}">
+        <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+        <strong>Noch keine Spielstände</strong>
+        <p class="empty-note">Starte eine neue Runde oder öffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
+      </div>
+
+      <div id="saveList" class="save-list save-list-pro" {% if not saves %}hidden{% endif %}>
         {% for save in saves %}
-        <article class="save-card save-card-pro" data-save-id="{{ save.id }}" data-search="{{ (save.name ~ ' ' ~ save.created_at ~ ' ' ~ save.updated_at ~ ' ' ~ save.status)|lower }}">
+        <article class="save-card save-card-pro bg-white shadow-md ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}" data-search="{{ (save.name ~ ' ' ~ save.created_at ~ ' ' ~ save.updated_at ~ ' ' ~ save.status)|lower }}">
           <div class="save-title-block">
             <strong>{{ save.name }}</strong>
             <p>{{ save.player_count }} Spieler &middot; Runde {{ save.round }} &middot; {{ save.status }}</p>
@@ -105,25 +111,18 @@
             <span>Aktiv <strong>{{ save.active_player or "n/a" }}</strong></span>
           </div>
           <div class="save-actions">
-            <button type="button" class="primary-btn" onclick="loadSave('{{ save.id }}')">Laden</button>
-            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" onclick="openSaveAction('rename', '{{ save.id }}', {{ save.name|tojson }})">Aa</button>
-            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" onclick="openSaveAction('duplicate', '{{ save.id }}', {{ save.name|tojson }})">++</button>
-            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" onclick="openSaveAction('delete', '{{ save.id }}', {{ save.name|tojson }})">x</button>
+            <button type="button" class="primary-btn" data-save-action="load" data-save-id="{{ save.id }}">Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" data-save-action="rename" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" data-save-action="duplicate" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" data-save-action="delete" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">x</button>
           </div>
         </article>
         {% endfor %}
       </div>
-      {% else %}
-      <div class="empty-product-state">
-        <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
-            <strong>Noch keine Spielstände</strong>
-            <p class="empty-note">Starte eine neue Runde oder öffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
-      </div>
-      {% endif %}
     </section>
 
     <section id="settings" class="dashboard-grid dashboard-grid-secondary home-view" data-home-view="settings" hidden>
-      <section class="menu-panel">
+      <section class="menu-panel bg-white shadow-xl ring-1 ring-slate-200">
         <div class="hero-badge">Einstellungen</div>
         <h2>Spielgefuehl</h2>
         <form id="settingsForm" class="settings-grid">
@@ -175,7 +174,7 @@
 
     </section>
 
-    <section class="menu-panel home-view about-view" data-home-view="about" hidden>
+    <section class="menu-panel home-view about-view bg-white shadow-xl ring-1 ring-slate-200" data-home-view="about" hidden>
       <div class="hero-badge">Produkt</div>
       <h2>Spassmonopoly Deluxe</h2>
       <p class="panel-copy">Ein robuster digitaler Spieltisch für lokale Runden, Lobby-Spiel und gespeicherte Sessions. Kernlogik, Saves und Logs laufen serverseitig, die Oberfläche priorisiert schnelle Entscheidungen am Tisch.</p>
@@ -205,11 +204,14 @@
     </div>
   </div>
 
+  <script src="{{ url_for('static', filename='debug.js') }}"></script>
   <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script>
     const toast = document.getElementById("toast");
     let activeSaveAction = null;
     const audio = new AudioManager({ volume: "{{ settings.volume }}" });
+    const saveList = document.getElementById("saveList");
+    const saveEmptyState = document.getElementById("saveEmptyState");
 
     function readSettingsForm() {
       return {
@@ -249,14 +251,17 @@
     async function apiPost(url, payload = null) {
       const options = { method: "POST", headers: { "Content-Type": "application/json" } };
       if (payload) options.body = JSON.stringify(payload);
+      debugLog("home", "api.post", { url, hasPayload: Boolean(payload) });
       const response = await fetch(url, options);
       const data = await response.json();
+      debugLog("home", "api.response", { url, status: response.status, ok: data.ok });
       if (!response.ok || !data.ok) throw new Error(data.msg || "Aktion fehlgeschlagen.");
       return data;
     }
 
     async function loadSave(saveId) {
       try {
+        debugLog("save-manager", "load.start", { saveId });
         const data = await apiPost(`/api/save/${saveId}/load`);
         showToast(data.message || "Spielstand geladen.");
         audio.play("save");
@@ -264,11 +269,13 @@
           window.location.href = data.redirect_url || "/board";
         }, 220);
       } catch (error) {
+        debugLog("save-manager", "load.error", { saveId, message: error.message });
         showToast(error.message);
       }
     }
 
     function openSaveAction(action, saveId, saveName) {
+      debugLog("save-manager", "modal.open", { action, saveId });
       activeSaveAction = { action, saveId, saveName };
       const modal = document.getElementById("saveActionModal");
       const title = document.getElementById("saveActionTitle");
@@ -317,11 +324,13 @@
         if (action === "rename") data = await apiPost(`/api/save/${saveId}/rename`, { name });
         if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
         if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
+        debugLog("save-manager", "action.success", { action, saveId, newSaveId: data.save?.id });
         updateSaveList(action, saveId, data.save);
         showToast(data.message || "Spielstand aktualisiert.");
         audio.play("success");
         closeSaveAction();
       } catch (error) {
+        debugLog("save-manager", "action.error", { action, saveId, message: error.message });
         showToast(error.message);
       }
     }
@@ -332,9 +341,8 @@
 
     function saveCardMarkup(save) {
       const active = save.active_player || "n/a";
-      const encodedName = encodeURIComponent(save.name);
       return `
-        <article class="save-card save-card-pro" data-save-id="${save.id}" data-search="${saveSearchText(save)}">
+        <article class="save-card save-card-pro bg-white shadow-md ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}" data-search="${saveSearchText(save)}">
           <div class="save-title-block">
             <strong>${escapeHtml(save.name)}</strong>
             <p>${save.player_count} Spieler &middot; Runde ${save.round} &middot; ${escapeHtml(save.status)}</p>
@@ -345,29 +353,37 @@
             <span>Aktiv <strong>${escapeHtml(active)}</strong></span>
           </div>
           <div class="save-actions">
-            <button type="button" class="primary-btn" onclick='loadSave("${save.id}")'>Laden</button>
-            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" onclick='openSaveAction("rename", "${save.id}", decodeURIComponent("${encodedName}"))'>Aa</button>
-            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" onclick='openSaveAction("duplicate", "${save.id}", decodeURIComponent("${encodedName}"))'>++</button>
-            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" onclick='openSaveAction("delete", "${save.id}", decodeURIComponent("${encodedName}"))'>x</button>
+            <button type="button" class="primary-btn" data-save-action="load" data-save-id="${save.id}">Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" data-save-action="rename" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" data-save-action="duplicate" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" data-save-action="delete" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">x</button>
           </div>
         </article>
       `;
     }
 
+    function refreshSaveEmptyState() {
+      const hasSaves = Boolean(saveList?.querySelector(".save-card-pro"));
+      if (saveList) saveList.hidden = !hasSaves;
+      if (saveEmptyState) saveEmptyState.classList.toggle("hidden", hasSaves);
+    }
+
     function updateSaveList(action, saveId, save) {
-      const list = document.getElementById("saveList");
       const card = document.querySelector(`[data-save-id="${saveId}"]`);
       if (action === "delete") {
         card?.remove();
+        refreshSaveEmptyState();
         return;
       }
-      if (!save || !list) return;
+      if (!save || !saveList) return;
       if (action === "rename" && card) {
         card.outerHTML = saveCardMarkup(save);
+        refreshSaveEmptyState();
         return;
       }
       if (action === "duplicate") {
-        list.insertAdjacentHTML("afterbegin", saveCardMarkup(save));
+        saveList.insertAdjacentHTML("afterbegin", saveCardMarkup(save));
+        refreshSaveEmptyState();
       }
     }
 
@@ -376,6 +392,20 @@
       document.querySelectorAll(".save-card-pro").forEach((card) => {
         card.hidden = !card.dataset.search.includes(term);
       });
+    });
+
+    saveList?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-save-action]");
+      if (!button) return;
+      const action = button.dataset.saveAction;
+      const saveId = button.dataset.saveId;
+      const saveName = button.dataset.saveName || button.closest("[data-save-name]")?.dataset.saveName || "";
+      debugLog("save-manager", "button.click", { action, saveId });
+      if (action === "load") {
+        loadSave(saveId);
+      } else {
+        openSaveAction(action, saveId, saveName);
+      }
     });
 
     document.getElementById("settingsForm").addEventListener("submit", async (event) => {

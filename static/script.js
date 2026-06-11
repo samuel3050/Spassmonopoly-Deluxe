@@ -419,6 +419,12 @@ function renderApp() {
 }
 
 function setState(nextState, options = {}) {
+  debugLog("board", "state.set", {
+    phase: nextState.phase,
+    active: nextState.aktiver,
+    isHost: nextState.isHost,
+    canAct: nextState.canAct,
+  });
   state = nextState;
   window.gameData = nextState;
 
@@ -470,8 +476,10 @@ function renderWinnerModal() {
 async function postJson(url, payload = null) {
   const options = { method: "POST", headers: { "Content-Type": "application/json" } };
   if (payload) options.body = JSON.stringify(payload);
+  debugLog("board", "api.post", { url, hasPayload: Boolean(payload) });
   const response = await fetch(url, options);
   const data = await response.json();
+  debugLog("board", "api.response", { url, status: response.status, ok: data.ok });
   if (!response.ok || !data.ok) {
     const error = new Error(data.msg || "Aktion konnte nicht ausgeführt werden.");
     error.state = data.state;
@@ -502,6 +510,7 @@ async function refreshState({ silent = true } = {}) {
   try {
     const response = await fetch("/api/state");
     const data = await response.json();
+    debugLog("board", "state.refresh", { status: response.status, ok: data.ok, silent });
     if (!response.ok || !data.ok) throw new Error(data.msg || "Spielstand konnte nicht aktualisiert werden.");
     const signature = getStateSignature(data.state);
     if (signature !== lastSignature) {
@@ -514,6 +523,7 @@ async function refreshState({ silent = true } = {}) {
       }
     }
   } catch (error) {
+    debugLog("board", "state.refresh.error", { message: error.message, silent });
     if (!silent) showToast(error.message);
   }
 }
@@ -609,6 +619,7 @@ function closeWinnerModal() {
 
 async function handleRoll() {
   if (busy) return;
+  debugLog("board", "roll.start", { active: state.aktiver, canAct: state.canAct });
   setBusy(true);
   try {
     const data = await postJson("/zug_wuerfeln");
@@ -629,6 +640,7 @@ async function handleRoll() {
 
 async function handleMove() {
   if (busy) return;
+  debugLog("board", "move.start", { active: state.aktiver, phase: state.phase });
   setBusy(true);
   try {
     const data = await postJson("/zug_ziehen");
@@ -649,6 +661,7 @@ async function handleMove() {
 
 async function handleFieldAction(action, fieldId) {
   if (busy) return;
+  debugLog("board", "field_action.start", { action, fieldId });
   setBusy(true);
   try {
     const data = await postJson("/feld_aktion", { aktion: action, feld: fieldId });
@@ -692,6 +705,7 @@ async function submitSaveGame() {
   }
   setBusy(true);
   try {
+    debugLog("board", "save_current.start", { hasName: Boolean(name) });
     const data = await postJson("/api/save-current", { name });
     closeSaveModal();
     setState(data.state, { toast: data.message || "Spielstand gespeichert." });
@@ -718,6 +732,7 @@ async function exitGame(mode) {
   if (busy) return;
   setBusy(true);
   try {
+    debugLog("board", "exit.start", { mode });
     const data = await postJson("/api/exit-game", { mode });
     audio?.play("save");
     window.location.href = data.redirect_url || "/";

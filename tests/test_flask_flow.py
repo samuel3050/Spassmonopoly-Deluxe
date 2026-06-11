@@ -108,12 +108,17 @@ class FlaskGameFlowTests(unittest.TestCase):
         renamed = self.client.post(f"/api/save/{save_id}/rename", json={"name": "Finale Runde"}).get_json()
         self.assertTrue(renamed["ok"])
         self.assertEqual(renamed["save"]["name"], "Finale Runde")
+        self.assertTrue({"id", "name", "game_id", "join_code", "host_id", "player_count", "round"}.issubset(renamed["save"]))
 
         duplicated = self.client.post(f"/api/save/{save_id}/duplicate", json={"name": "Finale Runde Kopie"}).get_json()
         self.assertTrue(duplicated["ok"])
         duplicate_id = duplicated["save"]["id"]
         self.assertNotEqual(duplicated["save"]["game_id"], renamed["save"]["game_id"])
         self.assertNotEqual(duplicated["save"]["join_code"], renamed["save"]["join_code"])
+
+        duplicate_name = self.client.post(f"/api/save/{save_id}/duplicate", json={"name": "Finale Runde Kopie"})
+        self.assertEqual(duplicate_name.status_code, 400)
+        self.assertFalse(duplicate_name.get_json()["ok"])
 
         deleted = self.client.post(f"/api/save/{duplicate_id}/delete").get_json()
         self.assertTrue(deleted["ok"])
@@ -127,6 +132,10 @@ class FlaskGameFlowTests(unittest.TestCase):
         invalid_rename = self.client.post(f"/api/save/{save_id}/rename", json={"name": "Bad/Name"})
         self.assertEqual(invalid_rename.status_code, 400)
         self.assertFalse(invalid_rename.get_json()["ok"])
+
+        missing_save = self.client.post("/api/save/not-a-save/rename", json={"name": "Gibt es nicht"})
+        self.assertEqual(missing_save.status_code, 404)
+        self.assertFalse(missing_save.get_json()["ok"])
 
         loaded = self.client.post(f"/api/save/{save_id}/load").get_json()
         self.assertTrue(loaded["ok"])
@@ -225,6 +234,15 @@ class FlaskGameFlowTests(unittest.TestCase):
         guest_save_attempt = guest_client.post("/api/save-current", json={"name": "Gast darf nicht speichern"})
         self.assertEqual(guest_save_attempt.status_code, 403)
         self.assertFalse(guest_save_attempt.get_json()["ok"])
+        guest_rename_attempt = guest_client.post(f"/api/save/{save_id}/rename", json={"name": "Gast Rename"})
+        self.assertEqual(guest_rename_attempt.status_code, 403)
+        self.assertFalse(guest_rename_attempt.get_json()["ok"])
+        guest_duplicate_attempt = guest_client.post(f"/api/save/{save_id}/duplicate", json={"name": "Gast Kopie"})
+        self.assertEqual(guest_duplicate_attempt.status_code, 403)
+        self.assertFalse(guest_duplicate_attempt.get_json()["ok"])
+        guest_delete_attempt = guest_client.post(f"/api/save/{save_id}/delete")
+        self.assertEqual(guest_delete_attempt.status_code, 403)
+        self.assertFalse(guest_delete_attempt.get_json()["ok"])
 
         response = host_client.post("/", data={"anzahl": "2"})
         self.assertEqual(response.status_code, 302)
