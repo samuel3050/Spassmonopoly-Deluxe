@@ -157,6 +157,51 @@ class FlaskGameFlowTests(unittest.TestCase):
         self.assertTrue(host_start["ok"])
         self.assertEqual(host_start["redirect_url"], "/board")
 
+    def test_lobby_save_load_rejoin_and_continue_after_other_game(self):
+        host_client = self.game_module.app.test_client()
+        guest_client = self.game_module.app.test_client()
+
+        self.assertTrue(host_client.post("/lobby/new").status_code in {302, 303})
+        host_join = host_client.post("/lobby/join", data={"name": "Samuel"}).get_json()
+        guest_join = guest_client.post("/lobby/join", data={"name": "Lukas"}).get_json()
+        self.assertTrue(host_join["ok"])
+        self.assertTrue(guest_join["ok"])
+        self.assertTrue(host_client.post("/lobby/ready").get_json()["ok"])
+        self.assertTrue(guest_client.post("/lobby/ready").get_json()["ok"])
+        self.assertTrue(host_client.post("/lobby/start").get_json()["ok"])
+
+        self.assertTrue(host_client.post("/zug_wuerfeln").get_json()["ok"])
+        moved = host_client.post("/zug_ziehen").get_json()["state"]
+        field = moved["popupFeld"]
+        action = "kaufen" if field.get("ist_kaufbar") and not field.get("besitzer") else "skip"
+        after_action = host_client.post("/feld_aktion", json={"aktion": action, "feld": field["feld_id"]}).get_json()
+        self.assertTrue(after_action["ok"])
+        self.assertEqual(after_action["state"]["activePlayerName"], "Lukas")
+
+        saved = host_client.post("/api/save-current", json={"name": "Rejoin Altspiel"}).get_json()
+        self.assertTrue(saved["ok"])
+        save_id = saved["save"]["id"]
+
+        response = host_client.post("/", data={"anzahl": "2"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/namen", response.headers["Location"])
+        response = host_client.post("/namen", data={"spieler1": "Neu A", "spieler2": "Neu B"})
+        self.assertEqual(response.status_code, 302)
+
+        loaded = guest_client.post(f"/api/save/{save_id}/load").get_json()
+        self.assertTrue(loaded["ok"])
+        self.assertEqual(loaded["redirect_url"], "/rejoin")
+        self.assertEqual(guest_client.get("/board").status_code, 302)
+
+        rejoined = guest_client.post("/rejoin", data={"player_id": guest_join["player_id"]})
+        self.assertEqual(rejoined.status_code, 302)
+        self.assertIn("/board", rejoined.headers["Location"])
+
+        state = guest_client.get("/api/state").get_json()["state"]
+        self.assertEqual(state["activePlayerName"], "Lukas")
+        self.assertTrue(state["canAct"])
+        self.assertTrue(guest_client.post("/zug_wuerfeln").get_json()["ok"])
+
     def test_invalid_save_state_is_rejected_before_commit(self):
         with self.game_module.app.app_context():
             with self.assertRaises(ValueError):

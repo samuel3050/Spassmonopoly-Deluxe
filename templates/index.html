@@ -157,16 +157,6 @@
         </form>
       </section>
 
-      <section id="about" class="menu-panel">
-        <div class="hero-badge">Produkt</div>
-        <h2>Spassmonopoly Deluxe</h2>
-        <p class="panel-copy">Gebaut als robustes Open-Source-Browsergame mit serverseitiger Spiellogik, Datenbank-Saves und einer UI fuer Desktop und Tablet.</p>
-        <div class="feature-row compact-features">
-          <span class="feature-pill">Flask</span>
-          <span class="feature-pill">SQLAlchemy</span>
-          <span class="feature-pill">MariaDB/MySQL-ready</span>
-        </div>
-      </section>
     </section>
 
     <section class="menu-panel home-view about-view" data-home-view="about" hidden>
@@ -199,10 +189,11 @@
     </div>
   </div>
 
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script>
     const toast = document.getElementById("toast");
     let activeSaveAction = null;
-    let audioContext = null;
+    const audio = new AudioManager({ volume: "{{ settings.volume }}" });
 
     function readSettingsForm() {
       return {
@@ -214,30 +205,11 @@
     }
 
     function applySettings(settings) {
+      audio.setSettings(settings);
       document.body.classList.toggle("theme-light", settings.theme === "light");
       document.body.classList.toggle("theme-dark", settings.theme !== "light");
       document.body.classList.toggle("reduce-motion", settings.animations === "off");
       document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : "1");
-    }
-
-    function playUiSound(kind = "tap") {
-      const volume = Number(document.getElementById("settingVolume")?.value || 0) / 100;
-      if (!volume) return;
-      try {
-        audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        oscillator.type = kind === "success" ? "triangle" : "sine";
-        oscillator.frequency.value = kind === "success" ? 660 : 440;
-        gain.gain.value = Math.min(0.09, volume * 0.09);
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-        oscillator.start();
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
-        oscillator.stop(audioContext.currentTime + 0.13);
-      } catch (error) {
-        return;
-      }
     }
 
     function showToast(message) {
@@ -259,7 +231,7 @@
       try {
         const data = await apiPost(`/api/save/${saveId}/load`);
         showToast(data.message || "Spielstand geladen.");
-        playUiSound("success");
+        audio.play("save");
         window.setTimeout(() => {
           window.location.href = data.redirect_url || "/board";
         }, 220);
@@ -318,7 +290,7 @@
         if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
         if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
         showToast(data.message || "Spielstand aktualisiert.");
-        playUiSound("success");
+        audio.play("success");
         window.setTimeout(() => window.location.reload(), 350);
       } catch (error) {
         showToast(error.message);
@@ -340,7 +312,7 @@
         });
         applySettings(data.settings);
         showToast(data.message || "Einstellungen gespeichert.");
-        playUiSound("success");
+        audio.play("save");
       } catch (error) {
         showToast(error.message);
       }
@@ -350,8 +322,15 @@
       document.getElementById(id).addEventListener("input", () => applySettings(readSettingsForm()));
       document.getElementById(id).addEventListener("change", () => {
         applySettings(readSettingsForm());
-        playUiSound("tap");
+        audio.play("button");
       });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
     });
 
     document.getElementById("saveActionModal").addEventListener("click", (event) => {

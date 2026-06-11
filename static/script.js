@@ -7,12 +7,10 @@ const BOARD_COORDS = [
 const BOARD_COLUMNS = 14;
 const BOARD_ROWS = 8;
 
-const DRAWER_KEYS = ["players", "ownership", "log", "help"];
 const refs = {};
 
 let state = window.gameData;
 let selectedFieldId = null;
-let activeDrawer = null;
 let busy = false;
 let toastTimer = null;
 let diceTimer = null;
@@ -29,7 +27,8 @@ let userSettings = {
   speed: "normal",
   ...(window.appSettings || {}),
 };
-let audioContext = null;
+let audio = null;
+let lastAudioEventId = state.lastEventEntry?.id || null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -67,30 +66,18 @@ function scaledDuration(value) {
 
 function applyUserSettings(settings = userSettings) {
   userSettings = { ...userSettings, ...settings };
+  audio?.setSettings(userSettings);
   document.body.classList.toggle("theme-light", userSettings.theme === "light");
   document.body.classList.toggle("theme-dark", userSettings.theme !== "light");
   document.body.classList.toggle("reduce-motion", !animationsEnabled());
   document.documentElement.style.setProperty("--motion-speed", String(speedScale()));
 }
 
-function playUiSound(kind = "tap") {
-  const volume = Math.max(0, Math.min(100, Number(userSettings.volume || 0))) / 100;
-  if (!volume) return;
-  try {
-    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = kind === "success" ? "triangle" : kind === "warn" ? "square" : "sine";
-    oscillator.frequency.value = kind === "success" ? 660 : kind === "warn" ? 220 : 440;
-    gain.gain.value = Math.min(0.08, volume * 0.08);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
-    oscillator.stop(audioContext.currentTime + 0.13);
-  } catch (error) {
-    return;
-  }
+function playGameEvent(event) {
+  if (!event?.id || event.id === lastAudioEventId) return;
+  lastAudioEventId = event.id;
+  if (event.type === "dice_roll") return;
+  audio?.play(audio.eventSound(event.type));
 }
 
 function getField(fieldId) {
@@ -438,6 +425,7 @@ function setState(nextState, options = {}) {
   if (selectedFieldId && !getField(selectedFieldId)) selectedFieldId = null;
 
   renderApp();
+  playGameEvent(nextState.lastEventEntry);
   if (options.toast) showToast(options.toast);
 }
 
@@ -536,7 +524,7 @@ function animateDice(roll) {
     refs.w2.src = `/static/dice/${roll[1]}.png`;
     refs.diceDisplay.classList.remove("rolling");
     refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
-    playUiSound("tap");
+    audio?.play("dice");
     return;
   }
   let ticks = 0;
@@ -553,41 +541,9 @@ function animateDice(roll) {
       refs.w2.src = `/static/dice/${roll[1]}.png`;
       refs.diceDisplay.classList.remove("rolling");
       refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
-      playUiSound("tap");
+      audio?.play("dice");
     }
   }, scaledDuration(65));
-}
-
-function openDrawer(key) {
-  if (!refs.drawers) return;
-  closeDrawer();
-  const drawer = refs.drawers[key];
-  if (!drawer) return;
-  drawer.classList.add("open");
-  drawer.setAttribute("aria-hidden", "false");
-  refs.drawerScrim.classList.add("open");
-  refs.drawerScrim.setAttribute("aria-hidden", "false");
-  activeDrawer = key;
-}
-
-function closeDrawer(key = null) {
-  if (!refs.drawers) return;
-  if (key && activeDrawer !== key) {
-    refs.drawers[key]?.classList.remove("open");
-    refs.drawers[key]?.setAttribute("aria-hidden", "true");
-    return;
-  }
-  DRAWER_KEYS.forEach((drawerKey) => {
-    refs.drawers[drawerKey].classList.remove("open");
-    refs.drawers[drawerKey].setAttribute("aria-hidden", "true");
-  });
-  refs.drawerScrim.classList.remove("open");
-  refs.drawerScrim.setAttribute("aria-hidden", "true");
-  activeDrawer = null;
-}
-
-function toggleDrawer(key) {
-  activeDrawer === key ? closeDrawer() : openDrawer(key);
 }
 
 function closeFieldModal() {
@@ -653,7 +609,7 @@ async function handleRoll() {
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
-    playUiSound("warn");
+    audio?.play("warn");
   } finally {
     setBusy(false);
   }
@@ -666,14 +622,14 @@ async function handleMove() {
     const data = await postJson("/zug_ziehen");
     setState(data.state, { openPending: true, toast: data.state.lastEvent });
     lastSignature = getStateSignature(data.state);
-    playUiSound("tap");
+    audio?.play("move");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
-    playUiSound("warn");
+    audio?.play("warn");
   } finally {
     setBusy(false);
   }
@@ -686,14 +642,15 @@ async function handleFieldAction(action, fieldId) {
     const data = await postJson("/feld_aktion", { aktion: action, feld: fieldId });
     setState(data.state, { closeModal: true, toast: data.state.lastEvent });
     lastSignature = getStateSignature(data.state);
-    playUiSound("success");
+    const fieldEvent = data.state.eventLog?.[data.state.eventLog.length - 2];
+    audio?.play(fieldEvent?.type === "card_event" ? "card" : "success");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
-    playUiSound("warn");
+    audio?.play("warn");
   } finally {
     setBusy(false);
   }
@@ -708,7 +665,7 @@ async function submitSaveGame() {
   const name = refs.manualSaveName.value.trim();
   if (name.length < 2) {
     showToast("Bitte gib mindestens 2 Zeichen ein.");
-    playUiSound("warn");
+    audio?.play("warn");
     return;
   }
   setBusy(true);
@@ -717,14 +674,14 @@ async function submitSaveGame() {
     closeSaveModal();
     setState(data.state, { toast: data.message || "Spielstand gespeichert." });
     lastSignature = getStateSignature(data.state);
-    playUiSound("success");
+    audio?.play("save");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
-    playUiSound("warn");
+    audio?.play("warn");
   } finally {
     setBusy(false);
   }
@@ -735,11 +692,11 @@ async function exitGame(mode) {
   setBusy(true);
   try {
     const data = await postJson("/api/exit-game", { mode });
-    playUiSound("success");
+    audio?.play("save");
     window.location.href = data.redirect_url || "/";
   } catch (error) {
     showToast(error.message);
-    playUiSound("warn");
+    audio?.play("warn");
     closeExitModal();
   } finally {
     setBusy(false);
@@ -781,23 +738,23 @@ function cacheRefs() {
   refs.w1 = document.getElementById("w1");
   refs.w2 = document.getElementById("w2");
   refs.diceDisplay = document.getElementById("diceDisplay");
-  refs.drawerScrim = document.getElementById("drawerScrim");
-  const drawers = {
-    players: document.getElementById("playersPanel"),
-    ownership: document.getElementById("ownershipPanel"),
-    log: document.getElementById("logPanel"),
-    help: document.getElementById("helpPanel"),
-  };
-  refs.drawers = Object.values(drawers).every(Boolean) ? drawers : null;
-  refs.drawerButtons = {
-    players: document.getElementById("playersPanelButton"),
-    ownership: document.getElementById("ownershipPanelButton"),
-    log: document.getElementById("logPanelButton"),
-    help: document.getElementById("helpPanelButton"),
-  };
 }
 
 function bindEvents() {
+  document.addEventListener("pointerdown", () => {
+    audio?.unlock();
+    audio?.startMusic();
+  }, { once: true });
+  document.addEventListener("keydown", () => {
+    audio?.unlock();
+    audio?.startMusic();
+  }, { once: true });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("button,a")) {
+      audio?.unlock();
+      audio?.play("button");
+    }
+  });
   refs.currentFieldButton.addEventListener("click", showPendingField);
   refs.saveGameButton.addEventListener("click", saveGame);
   refs.exitGameButton.addEventListener("click", openExitModal);
@@ -813,7 +770,6 @@ function bindEvents() {
   refs.winnerModal?.addEventListener("click", (event) => {
     if (event.target === refs.winnerModal) closeWinnerModal();
   });
-  refs.drawerScrim?.addEventListener("click", () => closeDrawer());
   refs.eventSearch.addEventListener("input", (event) => {
     eventSearchTerm = event.target.value.trim().toLowerCase();
     renderEventLog();
@@ -822,20 +778,19 @@ function bindEvents() {
     eventTypeFilter = event.target.value;
     renderEventLog();
   });
-  DRAWER_KEYS.forEach((key) => refs.drawerButtons[key]?.addEventListener("click", () => toggleDrawer(key)));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeFieldModal();
       closeExitModal();
       closeSaveModal();
       closeWinnerModal();
-      closeDrawer();
     }
   });
 }
 
 function bootBoard() {
   cacheRefs();
+  audio = new AudioManager(userSettings);
   applyUserSettings();
   bindEvents();
   renderApp();
@@ -851,12 +806,12 @@ function bootBoard() {
 
 document.addEventListener("DOMContentLoaded", bootBoard);
 window.addEventListener("pagehide", () => {
+  audio?.stopMusic();
   window.clearInterval(pollTimer);
   window.clearInterval(diceTimer);
   window.clearTimeout(toastTimer);
 });
 
-window.closeDrawer = closeDrawer;
 window.closeFieldModal = closeFieldModal;
 window.closeExitModal = closeExitModal;
 window.closeSaveModal = closeSaveModal;

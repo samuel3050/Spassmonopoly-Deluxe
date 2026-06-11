@@ -247,7 +247,10 @@ def save_game_state(room_id=ROOM_ID, game_state=None):
     game_state = copy.deepcopy(game_state)
     game_state.setdefault("room", {"id": room_id, "mode": "local"})
     game_state["room"].setdefault("id", room_id)
-    game_state.setdefault("lobby", copy.deepcopy(lobby_state))
+    if game_state["room"].get("mode") == "lobby":
+        game_state["lobby"] = copy.deepcopy(lobby_state)
+    else:
+        game_state.setdefault("lobby", copy.deepcopy(lobby_state))
     write_game_state(room_id, game_state)
     return game_state
 
@@ -321,6 +324,35 @@ def get_current_player_index(game_state=None):
     return None
 
 
+def session_player_is_known(game_state=None):
+    game_state = game_state or get_current_state()
+    return get_current_player_index(game_state) is not None
+
+
+def game_requires_rejoin(game_state=None):
+    game_state = game_state or get_current_state()
+    return bool(game_state and game_state.get("room", {}).get("mode") == "lobby" and not session_player_is_known(game_state))
+
+
+def ensure_session_id():
+    if not session.get("session_id"):
+        session["session_id"] = str(uuid4())
+    return session["session_id"]
+
+
+def bind_session_to_player(game_state, player_id):
+    player = next((item for item in game_state.get("players", []) if item.get("id") == player_id), None)
+    if not player:
+        raise ValueError("Dieser Spieler gehoert nicht zu diesem Spielstand.")
+    session_id = ensure_session_id()
+    session["player_id"] = player["id"]
+    session["player_name"] = player["name"]
+    session["room_id"] = game_state.get("room", {}).get("id", ROOM_ID)
+    lobby_state.setdefault("players", {}).setdefault(player["id"], {"name": player["name"], "ready": True})
+    lobby_state["players"][player["id"]]["session_id"] = session_id
+    return player
+
+
 def require_active_player(game_state=None):
     game_state = game_state or get_current_state()
     if not game_state or game_state.get("room", {}).get("mode") != "lobby":
@@ -388,6 +420,10 @@ def render_board():
         )
 
 
+def rejoin_redirect_for_state(game_state):
+    return url_for("rejoin_page") if game_requires_rejoin(game_state) else url_for("spiel")
+
+
 @app.route("/api/saves", methods=["GET"])
 def api_list_saves():
     """List all saved games."""
@@ -433,13 +469,15 @@ def api_load_save(save_id):
             normalized = normalize_game_state(game_state, ROOM_ID)
             if normalized is None:
                 return json_error("Spielstand ist nicht spielbar", 422)
+            lobby_state.clear()
+            lobby_state.update(infer_lobby_state(normalized, ROOM_ID))
             save_game_state(ROOM_ID, normalized)
             session.clear()
             return jsonify({
                 "ok": True,
                 "message": f"'{game_save.name}' geladen",
                 "save_id": save_id,
-                "redirect_url": url_for("spiel"),
+                "redirect_url": rejoin_redirect_for_state(normalized),
             })
     except Exception as e:
         app.logger.exception("Save load API failed")
@@ -590,6 +628,8 @@ def index():
             delete_saved_game_state(ROOM_ID)
             player_count = parse_player_count(request.form.get("anzahl"))
             session.clear()
+            lobby_state.clear()
+            lobby_state.update(default_lobby_state(ROOM_ID))
             session["anzahl"] = player_count
         return redirect(url_for("namen"))
 
@@ -604,8 +644,29 @@ def continue_game():
     if not has_saved_game(ROOM_ID):
         return redirect(url_for("index"))
     with state_lock, app.app_context():
-        load_game_state(ROOM_ID)
-    return redirect(url_for("spiel"))
+        game_state = load_game_state(ROOM_ID)
+    return redirect(rejoin_redirect_for_state(game_state))
+
+
+@app.route("/rejoin", methods=["GET", "POST"])
+def rejoin_page():
+    missing_game = redirect_if_game_missing()
+    if missing_game:
+        return missing_game
+
+    with state_lock, app.app_context():
+        game_state = get_current_state()
+        if game_state is None:
+            return redirect(url_for("index"))
+        if request.method == "POST":
+            try:
+                bind_session_to_player(game_state, request.form.get("player_id", ""))
+            except ValueError as exc:
+                return render_template("rejoin.html", game_state=game_state, error=str(exc)), 400
+            return redirect(url_for("spiel"))
+        if not game_requires_rejoin(game_state):
+            return redirect(url_for("spiel"))
+        return render_template("rejoin.html", game_state=game_state, error=None)
 
 
 @app.route("/lobby", methods=["GET"])
@@ -641,9 +702,12 @@ def lobby_join():
         if lobby_state.get("game_started") and current_game:
             if existing_player is None:
                 return json_error("Dieses Spiel laeuft bereits. Bitte mit einem vorhandenen Spielernamen verbinden.", 409)
+            session_id = ensure_session_id()
             session["player_id"] = existing_player["id"]
             session["player_name"] = existing_player["name"]
             session["room_id"] = ROOM_ID
+            lobby_state.setdefault("players", {}).setdefault(existing_player["id"], {"name": existing_player["name"], "ready": True})
+            lobby_state["players"][existing_player["id"]]["session_id"] = session_id
             return jsonify({"ok": True, "player_id": existing_player["id"], "game_started": True})
 
         current_session_player = session.get("player_id")
@@ -661,10 +725,12 @@ def lobby_join():
             return json_error("Die Lobby ist voll.", 409)
 
         player_id = matching_player_id or current_session_player or str(uuid4())
+        session_id = ensure_session_id()
 
         lobby_state.setdefault("players", {})[player_id] = {
             "name": name,
             "ready": bool(lobby_state.get("players", {}).get(player_id, {}).get("ready", False)),
+            "session_id": session_id,
         }
         lobby_state["room_id"] = ROOM_ID
         lobby_state["game_started"] = False
@@ -793,6 +859,8 @@ def spiel():
         return missing_game
 
     with app.app_context():
+        if game_requires_rejoin(get_current_state()):
+            return redirect(url_for("rejoin_page"))
         return render_board()
 
 

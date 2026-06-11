@@ -189,6 +189,7 @@
     window.gameData = {{ game_state|tojson }};
     window.appSettings = {{ settings|tojson }};
   </script>
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
