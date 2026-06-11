@@ -100,6 +100,16 @@ class FlaskGameFlowTests(unittest.TestCase):
         deleted = self.client.post(f"/api/save/{duplicate_id}/delete").get_json()
         self.assertTrue(deleted["ok"])
 
+        default_duplicate = self.client.post(f"/api/save/{save_id}/duplicate", json={}).get_json()
+        self.assertTrue(default_duplicate["ok"])
+        self.assertEqual(default_duplicate["save"]["name"], "Kopie von Finale Runde")
+        default_duplicate_id = default_duplicate["save"]["id"]
+        self.assertTrue(self.client.post(f"/api/save/{default_duplicate_id}/delete").get_json()["ok"])
+
+        invalid_rename = self.client.post(f"/api/save/{save_id}/rename", json={"name": "Bad/Name"})
+        self.assertEqual(invalid_rename.status_code, 400)
+        self.assertFalse(invalid_rename.get_json()["ok"])
+
         loaded = self.client.post(f"/api/save/{save_id}/load").get_json()
         self.assertTrue(loaded["ok"])
 
@@ -115,16 +125,27 @@ class FlaskGameFlowTests(unittest.TestCase):
     def test_settings_api_persists_global_preferences(self):
         saved = self.client.post(
             "/api/settings",
-            json={"volume": "44", "animations": "off", "theme": "light", "speed": "fast"},
+            json={
+                "volume": "44",
+                "music_volume": "25",
+                "effects_volume": "90",
+                "muted": "on",
+                "animations": "off",
+                "theme": "light",
+                "speed": "instant",
+            },
         ).get_json()
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["settings"]["volume"], "44")
+        self.assertEqual(saved["settings"]["music_volume"], "25")
+        self.assertEqual(saved["settings"]["effects_volume"], "90")
+        self.assertEqual(saved["settings"]["muted"], "on")
         self.assertEqual(saved["settings"]["theme"], "light")
         self.assertNotIn("autosave", saved["settings"])
 
         loaded = self.client.get("/api/settings").get_json()
         self.assertTrue(loaded["ok"])
-        self.assertEqual(loaded["settings"]["speed"], "fast")
+        self.assertEqual(loaded["settings"]["speed"], "instant")
 
     def test_lobby_rejects_duplicate_names(self):
         first_client = self.game_module.app.test_client()

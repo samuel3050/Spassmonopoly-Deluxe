@@ -57,11 +57,12 @@ function animationsEnabled() {
 function speedScale() {
   if (userSettings.speed === "slow") return 1.45;
   if (userSettings.speed === "fast") return 0.65;
+  if (userSettings.speed === "instant") return 0.05;
   return 1;
 }
 
 function scaledDuration(value) {
-  return Math.max(25, Math.round(value * speedScale()));
+  return Math.max(5, Math.round(value * speedScale()));
 }
 
 function applyUserSettings(settings = userSettings) {
@@ -109,7 +110,7 @@ function getPhaseLabel() {
   if (state.gameStatus === "finished") return "Beendet";
   if (state.phase === "move") return "Bewegen";
   if (state.phase === "field_action") return "Feldaktion";
-  return "Wuerfeln";
+  return "Würfeln";
 }
 
 function getActionCopy() {
@@ -117,20 +118,20 @@ function getActionCopy() {
     return state.lastEvent || "Die Runde ist beendet.";
   }
   if (state.phase === "move" && state.displayRoll) {
-    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewuerfelt. Jetzt wird gezogen.`;
+    return `${state.activePlayerName} hat ${state.displayRoll[0] + state.displayRoll[1]} gewürfelt. Jetzt wird gezogen.`;
   }
   if (state.phase === "field_action" && state.popupFeld) {
     return state.popupHint || `${state.activePlayerName} wertet ${state.popupFeld.name} aus.`;
   }
-  return `${state.activePlayerName || "Der aktive Spieler"} ist bereit fuer den naechsten Wurf.`;
+  return `${state.activePlayerName || "Der aktive Spieler"} ist bereit für den nächsten Wurf.`;
 }
 
 function getInsightCopy(field) {
-  if (!field) return "Waehle ein Feld aus, um Details zu sehen.";
+  if (!field) return "Wähle ein Feld aus, um Details zu sehen.";
   if (state.popupHint && isPendingField(field.feld_id)) return state.popupHint;
-  if (field.besitzer) return `${field.name} gehoert ${field.besitzer}.`;
+  if (field.besitzer) return `${field.name} gehört ${field.besitzer}.`;
   if (field.ist_kaufbar) return `${field.name} ist frei und kann beim Besuch gesichert werden.`;
-  return field.zusatz_regel || "Dieses Feld hat keinen zusaetzlichen Effekt.";
+  return field.zusatz_regel || "Dieses Feld hat keinen zusätzlichen Effekt.";
 }
 
 function scoreCardMarkup(entry, index) {
@@ -202,10 +203,10 @@ function buildFieldActions(field) {
     `;
   }
   if (field.besitzer && field.besitzer !== activePlayerName) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestaetigen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestätigen</button>`;
   }
   if (isSpecialActionField(field)) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt ausloesen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt auslösen</button>`;
   }
   return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Zug abschliessen</button>`;
 }
@@ -213,7 +214,7 @@ function buildFieldActions(field) {
 function createFieldDetails(field) {
   const owner = field.besitzer || "Noch frei";
   const active = isPendingField(field.feld_id);
-  const intro = active ? `${state.activePlayerName} steht aktuell hier.` : "Detailansicht fuer dieses Feld.";
+  const intro = active ? `${state.activePlayerName} steht aktuell hier.` : "Detailansicht für dieses Feld.";
   const note = active && state.popupHint ? state.popupHint : (field.zusatz_regel || "Keine Sonderregel.");
   return `
     <div class="hero-badge">${active ? "Aktive Aktion" : "Feldinfo"}</div>
@@ -317,10 +318,10 @@ function buildPrimaryActionMarkup(location = "center") {
     return `<button type="button" class="primary-btn" onclick="handleMove()" ${disabled ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>`;
   }
   if (state.phase === "field_action" && state.popupFeld) {
-    return `<button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld oeffnen</button>`;
+    return `<button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld öffnen</button>`;
   }
 
-  const label = canAct ? (location === "mirror" ? "Jetzt wuerfeln" : "Wuerfeln") : "Warten";
+  const label = canAct ? (location === "mirror" ? "Jetzt würfeln" : "Würfeln") : "Warten";
   return `<button type="button" class="primary-btn" onclick="handleRoll()" ${disabled ? "disabled" : ""}>${label}</button>`;
 }
 
@@ -329,7 +330,7 @@ function renderQuickStats() {
   refs.quickStats.innerHTML = [
     statCardMarkup("Runde", `#${highlights.runde || 1}`, "Aktuell"),
     statCardMarkup("Zug", `#${highlights.zugnummer || 1}`, "Gesamt"),
-    statCardMarkup("Spitze", highlights.leaderName || "Offen", highlights.leaderName ? `${highlights.leaderCount} Felder` : "Keine Fuehrung"),
+    statCardMarkup("Spitze", highlights.leaderName || "Offen", highlights.leaderName ? `${highlights.leaderCount} Felder` : "Keine Führung"),
     statCardMarkup("Frei", `${highlights.freieFelder ?? 0}`, "Felder"),
   ].join("");
 }
@@ -471,7 +472,7 @@ async function postJson(url, payload = null) {
   const response = await fetch(url, options);
   const data = await response.json();
   if (!response.ok || !data.ok) {
-    const error = new Error(data.msg || "Aktion konnte nicht ausgefuehrt werden.");
+    const error = new Error(data.msg || "Aktion konnte nicht ausgeführt werden.");
     error.state = data.state;
     throw error;
   }
@@ -523,13 +524,13 @@ function animateDice(roll) {
     refs.w1.src = `/static/dice/${roll[0]}.png`;
     refs.w2.src = `/static/dice/${roll[1]}.png`;
     refs.diceDisplay.classList.remove("rolling");
-    refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
+    refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewürfelt.`;
     audio?.play("dice");
     return;
   }
   let ticks = 0;
   refs.diceDisplay.classList.add("rolling");
-  refs.rollStatus.textContent = `${state.activePlayerName} wuerfelt ...`;
+  refs.rollStatus.textContent = `${state.activePlayerName} würfelt ...`;
 
   diceTimer = window.setInterval(() => {
     refs.w1.src = `/static/dice/${Math.floor(Math.random() * 6) + 1}.png`;
@@ -540,7 +541,7 @@ function animateDice(roll) {
       refs.w1.src = `/static/dice/${roll[0]}.png`;
       refs.w2.src = `/static/dice/${roll[1]}.png`;
       refs.diceDisplay.classList.remove("rolling");
-      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
+      refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewürfelt.`;
       audio?.play("dice");
     }
   }, scaledDuration(65));

@@ -68,7 +68,7 @@ class BoardStore:
     @contextmanager
     def _db_cursor(self, dictionary=False):
         if not self._check_db():
-            raise RuntimeError("Datenbank nicht verfuegbar")
+            raise RuntimeError("Datenbank nicht verfügbar")
 
         connection = mysql.connect(**DB_CONFIG)
         cursor = connection.cursor(dictionary=dictionary)

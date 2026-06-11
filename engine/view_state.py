@@ -7,20 +7,20 @@ def get_popup_hint(field, active_player=None):
 
     field_type = get_field_type(field)
     if field["ist_kaufbar"] and not field.get("besitzer"):
-        return f"Dieses Feld ist frei. Du kannst es jetzt fuer {field.get('kaufpreis') or '0'} sichern."
+        return f"Dieses Feld ist frei. Du kannst es jetzt für {field.get('kaufpreis') or '0'} sichern."
     if field.get("besitzer"):
         if active_player and (
             field.get("owner_player_id") == active_player.get("id")
             or field.get("besitzer") == active_player.get("name")
         ):
             return "Das ist dein eigenes Feld. Du kannst den Zug ohne Abgabe abschliessen."
-        return f"Dieses Feld gehoert {field['besitzer']}. Die Abgabe von {field.get('miete') or '0'} wird jetzt faellig."
+        return f"Dieses Feld gehört {field['besitzer']}. Die Abgabe von {field.get('miete') or '0'} wird jetzt fällig."
     if field_type == "gemeinschaft":
-        return "Dieses Gemeinschaftsfeld loest ein zufaelliges Ereignis fuer dich oder die ganze Runde aus."
+        return "Dieses Gemeinschaftsfeld löst ein zufälliges Ereignis für dich oder die ganze Runde aus."
     if field_type == "steuer":
         return f"Dieses Feld verlangt eine feste Abgabe von {field.get('miete') or '0'}."
     if field_type == "gefangnis":
-        return "Dieses Feld verhaengt eine Spielstrafe in Form von 2 zusaetzlichen Aktionspunkten."
+        return "Dieses Feld verhängt eine Spielstrafe in Form von 2 zusätzlichen Aktionspunkten."
     if field_type == "los":
         return "Auf Los darfst du 1 Aktionspunkt abziehen."
     if field_type == "spezial":

@@ -12,6 +12,9 @@ class GameSaveService:
 
     DEFAULT_GLOBAL_SETTINGS = {
         "volume": "70",
+        "music_volume": "35",
+        "effects_volume": "80",
+        "muted": "off",
         "animations": "on",
         "theme": "dark",
         "speed": "normal",
@@ -31,14 +34,14 @@ class GameSaveService:
 
         active_index = int(game_state.get("active_player_index", 0) or 0)
         if active_index < 0 or active_index >= len(players):
-            raise ValueError("Aktiver Spieler ist ungueltig")
+            raise ValueError("Aktiver Spieler ist ungültig")
 
         for index, player in enumerate(players):
             if not player.get("id") or not player.get("name"):
-                raise ValueError(f"Spieler {index + 1} ist unvollstaendig")
+                raise ValueError(f"Spieler {index + 1} ist unvollständig")
             position = int(player.get("position", 0) or 0)
             if position < 0 or position >= len(fields):
-                raise ValueError(f"Spielerposition von {player.get('name')} ist ungueltig")
+                raise ValueError(f"Spielerposition von {player.get('name')} ist ungültig")
 
         field_ids = set()
         for index, field in enumerate(fields):
@@ -53,20 +56,20 @@ class GameSaveService:
         for key in ("current_roll", "last_roll"):
             roll = dice.get(key)
             if roll is not None and (not isinstance(roll, list) or len(roll) != 2 or any(int(value) < 1 or int(value) > 6 for value in roll)):
-                raise ValueError(f"Wuerfelwert {key} ist ungueltig")
+                raise ValueError(f"Würfelwert {key} ist ungültig")
 
         pending = game_state.get("pending_action")
         if pending:
             pending_index = int(pending.get("field_index", -1))
             pending_player = int(pending.get("player_index", -1))
             if pending_index < 0 or pending_index >= len(fields):
-                raise ValueError("Offene Feldaktion verweist auf ein ungueltiges Feld")
+                raise ValueError("Offene Feldaktion verweist auf ein ungültiges Feld")
             if pending_player < 0 or pending_player >= len(players):
-                raise ValueError("Offene Feldaktion verweist auf einen ungueltigen Spieler")
+                raise ValueError("Offene Feldaktion verweist auf einen ungültigen Spieler")
 
         cards = game_state.get("cards", {})
         if cards and not isinstance(cards, dict):
-            raise ValueError("Kartenstatus ist ungueltig")
+            raise ValueError("Kartenstatus ist ungültig")
 
     @staticmethod
     def _sync_projection(game_save: GameSave, game_state: Dict[str, Any]) -> None:
@@ -434,17 +437,17 @@ class GameSaveService:
             if key not in allowed:
                 continue
             text_value = str(value).strip()
-            if key == "volume":
+            if key in {"volume", "music_volume", "effects_volume"}:
                 try:
                     text_value = str(max(0, min(100, int(text_value))))
                 except ValueError:
                     text_value = allowed[key]
-            elif key == "animations":
+            elif key in {"animations", "muted"}:
                 text_value = "on" if text_value in {"on", "true", "1", "yes"} else "off"
             elif key == "theme":
                 text_value = text_value if text_value in {"dark", "light"} else allowed[key]
             elif key == "speed":
-                text_value = text_value if text_value in {"slow", "normal", "fast"} else allowed[key]
+                text_value = text_value if text_value in {"slow", "normal", "fast", "instant"} else allowed[key]
             normalized[key] = text_value
 
         try:

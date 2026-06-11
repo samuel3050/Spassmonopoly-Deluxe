@@ -1,6 +1,12 @@
 class AudioManager {
   constructor(settings = {}) {
-    this.settings = { volume: "70", ...settings };
+    this.settings = {
+      volume: "70",
+      music_volume: "35",
+      effects_volume: "80",
+      muted: "off",
+      ...settings,
+    };
     this.context = null;
     this.master = null;
     this.music = null;
@@ -10,12 +16,24 @@ class AudioManager {
   setSettings(settings = {}) {
     this.settings = { ...this.settings, ...settings };
     if (this.master) {
-      this.master.gain.value = this.volume() * 0.16;
+      this.master.gain.value = this.masterVolume();
+    }
+    if (this.music) {
+      this.music.gain.gain.value = this.musicVolume() * 0.22;
     }
   }
 
-  volume() {
+  masterVolume() {
+    if (this.settings.muted === "on") return 0;
     return Math.max(0, Math.min(100, Number(this.settings.volume || 0))) / 100;
+  }
+
+  musicVolume() {
+    return Math.max(0, Math.min(100, Number(this.settings.music_volume || 0))) / 100;
+  }
+
+  effectsVolume() {
+    return Math.max(0, Math.min(100, Number(this.settings.effects_volume || 0))) / 100;
   }
 
   ensureContext() {
@@ -41,7 +59,7 @@ class AudioManager {
   }
 
   play(name = "button") {
-    if (!this.volume()) return;
+    if (!this.masterVolume() || !this.effectsVolume()) return;
     try {
       const context = this.ensureContext();
       const profile = this.soundProfile(name);
@@ -52,7 +70,7 @@ class AudioManager {
       if (profile.endFrequency) {
         oscillator.frequency.exponentialRampToValueAtTime(profile.endFrequency, context.currentTime + profile.duration);
       }
-      gain.gain.setValueAtTime(profile.gain * this.volume(), context.currentTime);
+      gain.gain.setValueAtTime(profile.gain * this.effectsVolume(), context.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + profile.duration);
       oscillator.connect(gain);
       gain.connect(this.master);
@@ -64,11 +82,11 @@ class AudioManager {
   }
 
   startMusic() {
-    if (!this.volume() || this.music) return;
+    if (!this.masterVolume() || !this.musicVolume() || this.music) return;
     try {
       const context = this.ensureContext();
       const gain = context.createGain();
-      gain.gain.value = 0.018 * this.volume();
+      gain.gain.value = this.musicVolume() * 0.22;
       gain.connect(this.master);
       const bass = this.createLoopOscillator(context, "sine", 110, gain);
       const pad = this.createLoopOscillator(context, "triangle", 220, gain);

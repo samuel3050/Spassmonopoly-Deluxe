@@ -1,6 +1,7 @@
 import copy
 import os
 import logging
+import re
 from threading import RLock
 from uuid import uuid4
 
@@ -15,7 +16,7 @@ try:
     from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 except ImportError as exc:
     raise SystemExit(
-        "Flask ist nicht installiert. Bitte fuehre `pip install -r requirements.txt` im Ordner "
+        "Flask ist nicht installiert. Bitte führe `pip install -r requirements.txt` im Ordner "
         "`Spassmonopoly-Deluxe` aus."
     ) from exc
 
@@ -343,7 +344,7 @@ def ensure_session_id():
 def bind_session_to_player(game_state, player_id):
     player = next((item for item in game_state.get("players", []) if item.get("id") == player_id), None)
     if not player:
-        raise ValueError("Dieser Spieler gehoert nicht zu diesem Spielstand.")
+        raise ValueError("Dieser Spieler gehört nicht zu diesem Spielstand.")
     session_id = ensure_session_id()
     session["player_id"] = player["id"]
     session["player_name"] = player["name"]
@@ -392,11 +393,13 @@ def clean_save_name(raw_value, fallback=None):
     if not name and fallback:
         name = fallback
     if not name:
-        raise ValueError("Bitte gib einen Namen fuer den Spielstand ein.")
+        raise ValueError("Bitte gib einen Namen für den Spielstand ein.")
     if len(name) < 2:
         raise ValueError("Der Name muss mindestens 2 Zeichen lang sein.")
     if len(name) > 64:
         raise ValueError("Der Name darf maximal 64 Zeichen lang sein.")
+    if not re.fullmatch(r"[\wÄÖÜäöüß ._()'!-]+", name, flags=re.UNICODE):
+        raise ValueError("Der Name enthält ungültige Zeichen.")
     return name
 
 
@@ -436,7 +439,7 @@ def api_list_saves():
             })
     except Exception as e:
         app.logger.exception("Save list API failed")
-        return json_error(f"Spielstaende konnten nicht geladen werden: {str(e)}", 500)
+        return json_error(f"Spielstände konnten nicht geladen werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>", methods=["GET"])
@@ -523,7 +526,7 @@ def api_exit_game():
     payload = request.get_json(silent=True) or {}
     mode = payload.get("mode")
     if mode not in {"save", "discard"}:
-        return json_error("Ungueltige Beenden-Aktion.", 400)
+        return json_error("Ungültige Beenden-Aktion.", 400)
 
     with state_lock, app.app_context():
         try:
@@ -573,11 +576,11 @@ def api_delete_save(save_id):
 
             return jsonify({
                 "ok": True,
-                "message": "Spielstand geloescht",
+                "message": "Spielstand gelöscht",
             })
     except Exception as e:
         app.logger.exception("Save delete API failed")
-        return json_error(f"Spielstand konnte nicht geloescht werden: {str(e)}", 500)
+        return json_error(f"Spielstand konnte nicht gelöscht werden: {str(e)}", 500)
 
 
 @app.route("/api/save/<save_id>/duplicate", methods=["POST"])
@@ -585,9 +588,12 @@ def api_duplicate_save(save_id):
     """Duplicate a saved game."""
     try:
         data = request.get_json(silent=True) or {}
-        new_name = clean_save_name(data.get("name", ""))
 
         with app.app_context():
+            source_save = GameSaveService.load_save(save_id)
+            if not source_save:
+                return json_error("Spielstand nicht gefunden", 404)
+            new_name = clean_save_name(data.get("name"), fallback=f"Kopie von {source_save.name}")
             game_save = GameSaveService.duplicate_save(save_id, new_name)
             if not game_save:
                 return json_error("Spielstand nicht gefunden", 404)
@@ -701,7 +707,7 @@ def lobby_join():
 
         if lobby_state.get("game_started") and current_game:
             if existing_player is None:
-                return json_error("Dieses Spiel laeuft bereits. Bitte mit einem vorhandenen Spielernamen verbinden.", 409)
+                return json_error("Dieses Spiel läuft bereits. Bitte mit einem vorhandenen Spielernamen verbinden.", 409)
             session_id = ensure_session_id()
             session["player_id"] = existing_player["id"]
             session["player_name"] = existing_player["name"]

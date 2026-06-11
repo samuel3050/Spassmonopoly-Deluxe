@@ -17,7 +17,7 @@
           <p class="panel-copy">Spieler sammeln, bereit setzen und die Runde sauber starten.</p>
         </div>
       </div>
-      <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenue</a>
+      <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenü</a>
     </header>
 
     <section class="lobby-grid">
@@ -69,14 +69,14 @@
         <div class="hero-badge">Aktionen</div>
         <h2>Runde starten</h2>
         <button id="startBtn" class="primary-btn launch-action" onclick="startGame()" disabled>Spiel starten</button>
-        <p id="startHint" class="panel-copy">Mindestens {{ min_players }} Spieler und alle muessen bereit sein.</p>
+        <p id="startHint" class="panel-copy">Mindestens {{ min_players }} Spieler und alle müssen bereit sein.</p>
 
         <div class="action-stack">
           <form method="post" action="{{ url_for('lobby_continue') }}">
             <button type="submit" class="secondary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>Letzte Runde fortsetzen</button>
           </form>
           <form method="post" action="{{ url_for('lobby_new') }}">
-            <button type="submit" class="secondary-btn full-width">Lobby zuruecksetzen</button>
+            <button type="submit" class="secondary-btn full-width">Lobby zurücksetzen</button>
           </form>
           <button id="refreshBtn" class="secondary-btn full-width" onclick="updateLobby()">Aktualisieren</button>
         </div>
@@ -215,11 +215,11 @@
         const isHost = currentPlayerId && data.host_id === currentPlayerId;
         const hasEnough = data.players.length >= minPlayers;
         startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
-        startBtn.textContent = data.game_started ? "Spiel laeuft" : "Spiel starten";
+        startBtn.textContent = data.game_started ? "Spiel läuft" : "Spiel starten";
         if (!currentPlayerId) startHint.textContent = "Bitte erst beitreten.";
         else if (!isHost) startHint.textContent = "Nur der Host kann die Runde starten.";
         else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
-        else if (!data.all_ready) startHint.textContent = "Alle Spieler muessen bereit sein.";
+        else if (!data.all_ready) startHint.textContent = "Alle Spieler müssen bereit sein.";
         else startHint.textContent = "Alles bereit. Die Runde kann starten.";
       } catch (error) {
         showStatus(error.message || "Lobby-Update fehlgeschlagen.", "warning");
@@ -235,12 +235,12 @@
         const response = await fetch("/lobby/ready", { method: "POST" });
         const data = await response.json();
         if (!response.ok || !data.ok) {
-          showStatus(data.msg || "Status konnte nicht geaendert werden.", "warning");
+          showStatus(data.msg || "Status konnte nicht geändert werden.", "warning");
           return;
         }
         await updateLobby();
       } catch (error) {
-        showStatus("Bereit-Status konnte nicht geaendert werden.", "warning");
+        showStatus("Bereit-Status konnte nicht geändert werden.", "warning");
       }
     }
 
@@ -256,7 +256,7 @@
           await updateLobby();
           return;
         }
-        showStatus("Spiel wird geoeffnet.", "success");
+        showStatus("Spiel wird geöffnet.", "success");
         window.setTimeout(() => {
           window.location.href = data.redirect_url || "/board";
         }, 350);

@@ -14,7 +14,7 @@
         <div>
           <div class="hero-badge">Deluxe Edition</div>
           <h1>Spassmonopoly Deluxe</h1>
-          <p class="panel-copy">Ein schneller digitaler Spieltisch fuer lokale Runden, Lobbys und gespeicherte Sessions.</p>
+          <p class="panel-copy">Ein schneller digitaler Spieltisch für lokale Runden, Lobbys und gespeicherte Sessions.</p>
         </div>
       </div>
 
@@ -31,7 +31,7 @@
         <div class="panel-heading">
           <div>
             <div class="hero-badge">Schnellstart</div>
-            <h2>Naechste Runde</h2>
+            <h2>Nächste Runde</h2>
           </div>
           <span class="status-chip status-chip-hot">{{ saves|length }} Saves</span>
         </div>
@@ -42,7 +42,7 @@
               Letzte Runde fortsetzen
             </button>
           </form>
-          <a href="{{ url_for('lobby_page') }}" class="secondary-link launch-action">Online-Lobby oeffnen</a>
+          <a href="{{ url_for('lobby_page') }}" class="secondary-link launch-action">Online-Lobby öffnen</a>
         </div>
 
         <form method="post" class="new-game-panel">
@@ -63,9 +63,9 @@
       <section class="menu-panel menu-panel-stack">
         <div class="mini-stat-grid">
           <article class="stat-card">
-            <span class="stat-label">Spielstaende</span>
+            <span class="stat-label">Spielstände</span>
             <strong class="stat-value">{{ saves|length }}</strong>
-            <span class="stat-meta">Verfuegbar</span>
+            <span class="stat-meta">Verfügbar</span>
           </article>
           <article class="stat-card">
             <span class="stat-label">Status</span>
@@ -76,8 +76,8 @@
 
         <div class="release-notes">
           <div class="hero-badge">Boardroom</div>
-          <h2>Klare Zuege, klare Saves</h2>
-          <p class="panel-copy">Wuerfe, Bewegung, Karten, Besitz und Logs werden serverseitig gespeichert und beim Laden wiederhergestellt.</p>
+          <h2>Klare Züge, klare Saves</h2>
+          <p class="panel-copy">Würfe, Bewegung, Karten, Besitz und Logs werden serverseitig gespeichert und beim Laden wiederhergestellt.</p>
         </div>
       </section>
     </section>
@@ -101,14 +101,14 @@
           </div>
           <div class="save-meta save-meta-grid">
             <span>Erstellt <strong>{{ save.created_at[:10] }}</strong></span>
-            <span>Geaendert <strong>{{ save.updated_at[:10] }}</strong></span>
+            <span>Geändert <strong>{{ save.updated_at[:10] }}</strong></span>
             <span>Aktiv <strong>{{ save.active_player or "n/a" }}</strong></span>
           </div>
           <div class="save-actions">
             <button type="button" class="primary-btn" onclick="loadSave('{{ save.id }}')">Laden</button>
             <button type="button" class="secondary-btn icon-btn" title="Umbenennen" onclick="openSaveAction('rename', '{{ save.id }}', {{ save.name|tojson }})">Aa</button>
             <button type="button" class="secondary-btn icon-btn" title="Duplizieren" onclick="openSaveAction('duplicate', '{{ save.id }}', {{ save.name|tojson }})">++</button>
-            <button type="button" class="secondary-btn icon-btn danger-text" title="Loeschen" onclick="openSaveAction('delete', '{{ save.id }}', {{ save.name|tojson }})">x</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" onclick="openSaveAction('delete', '{{ save.id }}', {{ save.name|tojson }})">x</button>
           </div>
         </article>
         {% endfor %}
@@ -116,8 +116,8 @@
       {% else %}
       <div class="empty-product-state">
         <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
-            <strong>Noch keine Spielstaende</strong>
-            <p class="empty-note">Starte eine neue Runde oder oeffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
+            <strong>Noch keine Spielstände</strong>
+            <p class="empty-note">Starte eine neue Runde oder öffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
       </div>
       {% endif %}
     </section>
@@ -128,8 +128,23 @@
         <h2>Spielgefuehl</h2>
         <form id="settingsForm" class="settings-grid">
           <label class="setting-row">
-            <span>Lautstaerke</span>
+            <span>Master Volume</span>
             <input id="settingVolume" type="range" min="0" max="100" value="{{ settings.volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Music Volume</span>
+            <input id="settingMusicVolume" type="range" min="0" max="100" value="{{ settings.music_volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Effects Volume</span>
+            <input id="settingEffectsVolume" type="range" min="0" max="100" value="{{ settings.effects_volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Mute</span>
+            <select id="settingMuted">
+              <option value="off" {% if settings.muted == "off" %}selected{% endif %}>Aus</option>
+              <option value="on" {% if settings.muted == "on" %}selected{% endif %}>Ein</option>
+            </select>
           </label>
           <label class="setting-row">
             <span>Animationen</span>
@@ -151,6 +166,7 @@
               <option value="slow" {% if settings.speed == "slow" %}selected{% endif %}>Ruhig</option>
               <option value="normal" {% if settings.speed == "normal" %}selected{% endif %}>Normal</option>
               <option value="fast" {% if settings.speed == "fast" %}selected{% endif %}>Schnell</option>
+              <option value="instant" {% if settings.speed == "instant" %}selected{% endif %}>Sofort</option>
             </select>
           </label>
           <button type="submit" class="primary-btn">Einstellungen speichern</button>
@@ -162,7 +178,7 @@
     <section class="menu-panel home-view about-view" data-home-view="about" hidden>
       <div class="hero-badge">Produkt</div>
       <h2>Spassmonopoly Deluxe</h2>
-      <p class="panel-copy">Ein robuster digitaler Spieltisch fuer lokale Runden, Lobby-Spiel und gespeicherte Sessions. Kernlogik, Saves und Logs laufen serverseitig, die Oberflaeche priorisiert schnelle Entscheidungen am Tisch.</p>
+      <p class="panel-copy">Ein robuster digitaler Spieltisch für lokale Runden, Lobby-Spiel und gespeicherte Sessions. Kernlogik, Saves und Logs laufen serverseitig, die Oberfläche priorisiert schnelle Entscheidungen am Tisch.</p>
       <div class="feature-row compact-features">
         <span class="feature-pill">Flask</span>
         <span class="feature-pill">SQLAlchemy</span>
@@ -198,6 +214,9 @@
     function readSettingsForm() {
       return {
         volume: document.getElementById("settingVolume").value,
+        music_volume: document.getElementById("settingMusicVolume").value,
+        effects_volume: document.getElementById("settingEffectsVolume").value,
+        muted: document.getElementById("settingMuted").value,
         animations: document.getElementById("settingAnimations").value,
         theme: document.getElementById("settingTheme").value,
         speed: document.getElementById("settingSpeed").value,
@@ -209,7 +228,16 @@
       document.body.classList.toggle("theme-light", settings.theme === "light");
       document.body.classList.toggle("theme-dark", settings.theme !== "light");
       document.body.classList.toggle("reduce-motion", settings.animations === "off");
-      document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : "1");
+      document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : settings.speed === "instant" ? "0.05" : "1");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     }
 
     function showToast(message) {
@@ -249,7 +277,7 @@
       const label = document.getElementById("saveNameLabel");
       const primary = document.getElementById("saveActionPrimary");
 
-      input.value = action === "duplicate" ? `${saveName} Kopie` : saveName;
+      input.value = action === "duplicate" ? `Kopie von ${saveName}` : saveName;
       input.style.display = action === "delete" ? "none" : "block";
       label.style.display = action === "delete" ? "none" : "block";
       primary.classList.toggle("danger-btn", action === "delete");
@@ -263,9 +291,9 @@
         intro.textContent = "Erstellt eine zweite Version mit identischem Spielzustand.";
         primary.textContent = "Duplizieren";
       } else {
-        title.textContent = "Spielstand loeschen";
-        intro.textContent = `Willst du '${saveName}' wirklich loeschen?`;
-        primary.textContent = "Loeschen";
+        title.textContent = "Spielstand löschen";
+        intro.textContent = `Willst du '${saveName}' wirklich löschen?`;
+        primary.textContent = "Löschen";
       }
 
       modal.classList.add("open");
@@ -289,11 +317,57 @@
         if (action === "rename") data = await apiPost(`/api/save/${saveId}/rename`, { name });
         if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
         if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
+        updateSaveList(action, saveId, data.save);
         showToast(data.message || "Spielstand aktualisiert.");
         audio.play("success");
-        window.setTimeout(() => window.location.reload(), 350);
+        closeSaveAction();
       } catch (error) {
         showToast(error.message);
+      }
+    }
+
+    function saveSearchText(save) {
+      return `${save.name} ${save.created_at} ${save.updated_at} ${save.status}`.toLowerCase();
+    }
+
+    function saveCardMarkup(save) {
+      const active = save.active_player || "n/a";
+      const encodedName = encodeURIComponent(save.name);
+      return `
+        <article class="save-card save-card-pro" data-save-id="${save.id}" data-search="${saveSearchText(save)}">
+          <div class="save-title-block">
+            <strong>${escapeHtml(save.name)}</strong>
+            <p>${save.player_count} Spieler &middot; Runde ${save.round} &middot; ${escapeHtml(save.status)}</p>
+          </div>
+          <div class="save-meta save-meta-grid">
+            <span>Erstellt <strong>${escapeHtml(String(save.created_at).slice(0, 10))}</strong></span>
+            <span>Geändert <strong>${escapeHtml(String(save.updated_at).slice(0, 10))}</strong></span>
+            <span>Aktiv <strong>${escapeHtml(active)}</strong></span>
+          </div>
+          <div class="save-actions">
+            <button type="button" class="primary-btn" onclick='loadSave("${save.id}")'>Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" onclick='openSaveAction("rename", "${save.id}", decodeURIComponent("${encodedName}"))'>Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" onclick='openSaveAction("duplicate", "${save.id}", decodeURIComponent("${encodedName}"))'>++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" onclick='openSaveAction("delete", "${save.id}", decodeURIComponent("${encodedName}"))'>x</button>
+          </div>
+        </article>
+      `;
+    }
+
+    function updateSaveList(action, saveId, save) {
+      const list = document.getElementById("saveList");
+      const card = document.querySelector(`[data-save-id="${saveId}"]`);
+      if (action === "delete") {
+        card?.remove();
+        return;
+      }
+      if (!save || !list) return;
+      if (action === "rename" && card) {
+        card.outerHTML = saveCardMarkup(save);
+        return;
+      }
+      if (action === "duplicate") {
+        list.insertAdjacentHTML("afterbegin", saveCardMarkup(save));
       }
     }
 
@@ -318,7 +392,7 @@
       }
     });
 
-    ["settingVolume", "settingAnimations", "settingTheme", "settingSpeed"].forEach((id) => {
+    ["settingVolume", "settingMusicVolume", "settingEffectsVolume", "settingMuted", "settingAnimations", "settingTheme", "settingSpeed"].forEach((id) => {
       document.getElementById(id).addEventListener("input", () => applySettings(readSettingsForm()));
       document.getElementById(id).addEventListener("change", () => {
         applySettings(readSettingsForm());

@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spieler auswaehlen</title>
+  <title>Spieler auswählen</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body class="page page-setup">
   <main class="setup-shell">
     <section class="setup-card">
       <div class="hero-badge">Rejoin</div>
-      <h1>Spieler auswaehlen</h1>
-      <p class="hero-copy">Dieser Spielstand ist geladen. Waehle deinen gespeicherten Spieler, um mit der richtigen Session weiterzuspielen.</p>
+      <h1>Spieler auswählen</h1>
+      <p class="hero-copy">Dieser Spielstand ist geladen. Wähle deinen gespeicherten Spieler, um mit der richtigen Session weiterzuspielen.</p>
 
       {% if error %}
       <p class="status-message warning">{{ error }}</p>
@@ -31,7 +31,7 @@
         </div>
 
         <div class="form-actions">
-          <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenue</a>
+          <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenü</a>
           <button type="submit" class="primary-btn">Weiter spielen</button>
         </div>
       </form>

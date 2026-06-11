@@ -31,7 +31,7 @@
       </div>
     </header>
 
-    <section class="studio-game-grid" aria-label="Spieloberflaeche">
+    <section class="studio-game-grid" aria-label="Spieloberfläche">
       <aside class="studio-panel player-command-panel">
         <section class="active-turn-card" aria-live="polite">
           <span class="panel-kicker">Am Zug</span>
@@ -43,7 +43,7 @@
           <div class="panel-heading compact-heading">
             <div>
               <span class="panel-kicker">Spieler</span>
-              <h2>Uebersicht</h2>
+              <h2>Übersicht</h2>
             </div>
             <span id="playerCountChip" class="status-chip"></span>
           </div>
@@ -83,8 +83,8 @@
               <div id="turnSummary" class="turn-summary turn-summary-center"></div>
 
               <div id="diceDisplay" class="dice-display dice-display-center">
-                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel eins">
-                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Wuerfel zwei">
+                <img id="w1" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel eins">
+                <img id="w2" src="{{ url_for('static', filename='dice/1.png') }}" alt="Würfel zwei">
               </div>
 
               <div id="commandActions" class="command-actions command-actions-center"></div>
@@ -99,7 +99,7 @@
           <div class="panel-heading compact-heading">
             <div>
               <span class="panel-kicker">Aktionen</span>
-              <h2>Naechster Schritt</h2>
+              <h2>Nächster Schritt</h2>
             </div>
           </div>
           <div id="actionMirror" class="action-mirror"></div>
@@ -118,7 +118,7 @@
             <input id="eventSearch" type="search" placeholder="Log durchsuchen" autocomplete="off">
             <select id="eventFilter" aria-label="Log-Kategorie filtern">
               <option value="all">Alle</option>
-              <option value="dice_roll">Wuerfe</option>
+              <option value="dice_roll">Würfe</option>
               <option value="movement">Bewegung</option>
               <option value="card_event">Karten</option>
               <option value="penalty">Strafen</option>
@@ -161,7 +161,7 @@
       <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeExitModal()">x</button>
       <div class="hero-badge">Spiel beenden</div>
       <h2>Spiel speichern bevor beendet wird?</h2>
-      <p class="modal-intro">Waehle, ob der aktuelle Zustand vor der Rueckkehr ins Hauptmenue gespeichert werden soll.</p>
+      <p class="modal-intro">Wähle, ob der aktuelle Zustand vor der Rückkehr ins Hauptmenü gespeichert werden soll.</p>
       <div class="modal-actions modal-actions-stack">
         <button type="button" class="primary-btn" onclick="exitGame('save')">Speichern und beenden</button>
         <button type="button" class="secondary-btn" onclick="exitGame('discard')">Ohne Speichern beenden</button>
@@ -175,7 +175,7 @@
       <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeSaveModal()">x</button>
       <div class="hero-badge">Spielstand</div>
       <h2>Spielstand benennen</h2>
-      <p class="modal-intro">Vergib einen Namen, der spaeter im Save Manager wiedererkennbar ist.</p>
+      <p class="modal-intro">Vergib einen Namen, der später im Save Manager wiedererkennbar ist.</p>
       <label class="field-label" for="manualSaveName">Name</label>
       <input id="manualSaveName" type="text" maxlength="64" placeholder="Freitag Abend Runde" autocomplete="off">
       <div class="modal-actions">

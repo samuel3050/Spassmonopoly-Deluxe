@@ -32,42 +32,35 @@ SPECIAL_FIELD_RULES = {
     10: {"delta_self": -2, "message": "Ideenjoker: Du darfst 2 Aktionspunkte abziehen."},
     20: {"delta_self": -1, "message": "Ruheoase: Du darfst 1 Aktionspunkt abziehen."},
     30: {"delta_all": -1, "message": "Fairplay-Zentrale: Allen wird 1 Aktionspunkt erlassen."},
-    40: {"delta_all": 1, "message": "Finale der Freude: Alle bekommen 1 zusaetzlichen Aktionspunkt."},
+    40: {"delta_all": 1, "message": "Finale der Freude: Alle bekommen 1 zusätzlichen Aktionspunkt."},
 }
 
 GEMEINSCHAFT_EFFECTS = [
-    {"title": "Glueck gehabt", "delta_self": -2, "message": "Du darfst dir 2 Aktionspunkte abziehen."},
+    {"title": "Glück gehabt", "delta_self": -2, "message": "Du darfst dir 2 Aktionspunkte abziehen."},
     {"title": "Pech gehabt", "delta_self": 2, "message": "Du bekommst 2 Aktionspunkte dazu."},
-    {"title": "Eine Runde fuer alle", "delta_all": 1, "message": "Jeder bekommt 1 Aktionspunkt."},
+    {"title": "Eine Runde für alle", "delta_all": 1, "message": "Jeder bekommt 1 Aktionspunkt."},
     {"title": "Gute Stimmung", "delta_all": -1, "message": "Allen wird 1 Aktionspunkt erlassen."},
     {"title": "Durchatmen", "message": "Nichts passiert. Atmet tief durch."},
 ]
 
 DISPLAY_REPLACEMENTS = {
-    "\u00c3\u0178": "ss",
-    "\u00c3\u00a4": "ae",
-    "\u00c3\u00b6": "oe",
-    "\u00c3\u00bc": "ue",
-    "\u00c3\u201e": "Ae",
-    "\u00c3\u2013": "Oe",
-    "\u00c3\u0152": "Ue",
-    "\u00c3\u0192\u00c5\u00b8": "ss",
-    "\u00c3\u0192\u00c2\u00a4": "ae",
-    "\u00c3\u0192\u00c2\u00b6": "oe",
-    "\u00c3\u0192\u00c2\u00bc": "ue",
-    "\u00c3\u0192\u00e2\u20ac\u017e": "Ae",
-    "\u00c3\u0192\u00e2\u20ac\u201c": "Oe",
-    "\u00c3\u0192\u00c5\u201c": "Ue",
+    "\u00c3\u0178": "ß",
+    "\u00c3\u00a4": "ä",
+    "\u00c3\u00b6": "ö",
+    "\u00c3\u00bc": "ü",
+    "\u00c3\u201e": "Ä",
+    "\u00c3\u2013": "Ö",
+    "\u00c3\u0152": "Ü",
+    "\u00c3\u0192\u00c5\u00b8": "ß",
+    "\u00c3\u0192\u00c2\u00a4": "ä",
+    "\u00c3\u0192\u00c2\u00b6": "ö",
+    "\u00c3\u0192\u00c2\u00bc": "ü",
+    "\u00c3\u0192\u00e2\u20ac\u017e": "Ä",
+    "\u00c3\u0192\u00e2\u20ac\u201c": "Ö",
+    "\u00c3\u0192\u00c5\u201c": "Ü",
     "\u00e2\u20ac\u201d": "-",
     "\u00c2\u00b7": "-",
     "\u00c2": "",
-    "\u00e4": "ae",
-    "\u00f6": "oe",
-    "\u00fc": "ue",
-    "\u00c4": "Ae",
-    "\u00d6": "Oe",
-    "\u00dc": "Ue",
-    "\u00df": "ss",
 }
 
 
@@ -279,7 +272,7 @@ def init_game(config):
     }
     return push_event(
         state,
-        f"Spielstart: {players[0]['name']} eroeffnet Runde 1.",
+        f"Spielstart: {players[0]['name']} eröffnet Runde 1.",
         event_type="game_start",
         severity="success",
         player_id=players[0]["id"],
@@ -330,7 +323,7 @@ def roll_dice(game_state, dice=None, rng=None):
     roller = rng or random
     roll = list(dice) if dice is not None else [roller.randint(1, 6), roller.randint(1, 6)]
     if len(roll) != 2 or any(int(value) < 1 or int(value) > 6 for value in roll):
-        raise ValueError("Ein Wurf muss aus zwei Wuerfeln zwischen 1 und 6 bestehen.")
+        raise ValueError("Ein Wurf muss aus zwei Würfeln zwischen 1 und 6 bestehen.")
 
     roll = [int(roll[0]), int(roll[1])]
     state["dice"]["current_roll"] = roll
@@ -349,7 +342,7 @@ def roll_dice(game_state, dice=None, rng=None):
     _set_phase(state, "move")
     return push_event(
         state,
-        f"{active_player['name']} wuerfelt {sum(roll)} ({roll[0]} + {roll[1]}).",
+        f"{active_player['name']} würfelt {sum(roll)} ({roll[0]} + {roll[1]}).",
         event_type="dice_roll",
         severity="info",
         player_id=active_player["id"],
@@ -360,14 +353,14 @@ def roll_dice(game_state, dice=None, rng=None):
 def move_player(game_state, steps=None):
     state = copy.deepcopy(game_state)
     _require_running(state)
-    _require_phase(state, "move", "Es gibt gerade keinen bestaetigten Wurf zum Ziehen.")
+    _require_phase(state, "move", "Es gibt gerade keinen bestätigten Wurf zum Ziehen.")
     active_index, active_player = get_active_player(state)
 
     roll = state.get("dice", {}).get("current_roll")
     if steps is None:
         if not roll:
             _set_phase(state, "roll")
-            raise ValueError("Der Wurf ist nicht mehr verfuegbar.")
+            raise ValueError("Der Wurf ist nicht mehr verfügbar.")
         steps = sum(roll)
 
     fields = state.get("board", {}).get("fields", [])
@@ -445,7 +438,7 @@ def apply_non_property_effect(state, field, active_index):
     if field_type == "spezial":
         rule = SPECIAL_FIELD_RULES.get(int(field["feld_id"]))
         if rule is None:
-            return f"{player['name']} loest auf {field['name']} einen Spezialeffekt aus."
+            return f"{player['name']} löst auf {field['name']} einen Spezialeffekt aus."
         if "delta_self" in rule:
             clamp_points(player, rule["delta_self"])
         if "delta_all" in rule:
@@ -482,23 +475,23 @@ def apply_field_effect(game_state, action="skip", field_id=None):
         if not field["ist_kaufbar"]:
             raise ValueError("Dieses Feld kann nicht gesichert werden.")
         if field.get("besitzer"):
-            raise ValueError("Dieses Feld gehoert bereits jemandem.")
+            raise ValueError("Dieses Feld gehört bereits jemandem.")
 
         field["besitzer"] = active_player["name"]
         field["owner_player_id"] = active_player["id"]
         clamp_points(active_player, parse_number(field.get("kaufpreis")))
-        message = f"{active_player['name']} sichert sich {field['name']} fuer {field.get('kaufpreis') or '0'}."
+        message = f"{active_player['name']} sichert sich {field['name']} für {field.get('kaufpreis') or '0'}."
         event_type = "field_purchase"
         severity = "success"
 
     elif action == "miete":
         is_own_field = field.get("owner_player_id") == active_player["id"] or field.get("besitzer") == active_player["name"]
         if not field.get("besitzer") or is_own_field:
-            raise ValueError("Auf diesem Feld ist keine Abgabe faellig.")
+            raise ValueError("Auf diesem Feld ist keine Abgabe fällig.")
 
         clamp_points(active_player, parse_number(field.get("miete")))
         message = (
-            f"{active_player['name']} bestaetigt auf {field['name']} "
+            f"{active_player['name']} bestätigt auf {field['name']} "
             f"die Abgabe von {field.get('miete') or '0'} an {field['besitzer']}."
         )
         event_type = "penalty"
@@ -594,7 +587,7 @@ def next_turn(game_state):
 
     return push_event(
         state,
-        f"{players[next_active]['name']} ist als Naechstes am Zug.",
+        f"{players[next_active]['name']} ist als Nächstes am Zug.",
         event_type="turn_change",
         severity="info",
         player_id=players[next_active]["id"],
