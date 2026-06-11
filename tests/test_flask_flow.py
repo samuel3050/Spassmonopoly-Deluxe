@@ -115,11 +115,12 @@ class FlaskGameFlowTests(unittest.TestCase):
     def test_settings_api_persists_global_preferences(self):
         saved = self.client.post(
             "/api/settings",
-            json={"volume": "44", "animations": "off", "theme": "light", "autosave": "on", "speed": "fast"},
+            json={"volume": "44", "animations": "off", "theme": "light", "speed": "fast"},
         ).get_json()
         self.assertTrue(saved["ok"])
         self.assertEqual(saved["settings"]["volume"], "44")
         self.assertEqual(saved["settings"]["theme"], "light")
+        self.assertNotIn("autosave", saved["settings"])
 
         loaded = self.client.get("/api/settings").get_json()
         self.assertTrue(loaded["ok"])
@@ -137,6 +138,24 @@ class FlaskGameFlowTests(unittest.TestCase):
         duplicate = duplicate_response.get_json()
         self.assertEqual(duplicate_response.status_code, 409)
         self.assertFalse(duplicate["ok"])
+
+    def test_only_lobby_host_can_start_game(self):
+        host_client = self.game_module.app.test_client()
+        guest_client = self.game_module.app.test_client()
+
+        self.assertTrue(host_client.post("/lobby/new").status_code in {302, 303})
+        self.assertTrue(host_client.post("/lobby/join", data={"name": "Host"}).get_json()["ok"])
+        self.assertTrue(guest_client.post("/lobby/join", data={"name": "Gast"}).get_json()["ok"])
+        self.assertTrue(host_client.post("/lobby/ready").get_json()["ok"])
+        self.assertTrue(guest_client.post("/lobby/ready").get_json()["ok"])
+
+        guest_start = guest_client.post("/lobby/start")
+        self.assertEqual(guest_start.status_code, 403)
+        self.assertFalse(guest_start.get_json()["ok"])
+
+        host_start = host_client.post("/lobby/start").get_json()
+        self.assertTrue(host_start["ok"])
+        self.assertEqual(host_start["redirect_url"], "/board")
 
     def test_invalid_save_state_is_rejected_before_commit(self):
         with self.game_module.app.app_context():

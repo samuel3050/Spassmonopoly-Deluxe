@@ -1,7 +1,7 @@
 from .game_engine import clean_display_text, get_field_type, normalize_event_log
 
 
-def get_popup_hint(field):
+def get_popup_hint(field, active_player=None):
     if not field:
         return None
 
@@ -9,6 +9,11 @@ def get_popup_hint(field):
     if field["ist_kaufbar"] and not field.get("besitzer"):
         return f"Dieses Feld ist frei. Du kannst es jetzt fuer {field.get('kaufpreis') or '0'} sichern."
     if field.get("besitzer"):
+        if active_player and (
+            field.get("owner_player_id") == active_player.get("id")
+            or field.get("besitzer") == active_player.get("name")
+        ):
+            return "Das ist dein eigenes Feld. Du kannst den Zug ohne Abgabe abschliessen."
         return f"Dieses Feld gehoert {field['besitzer']}. Die Abgabe von {field.get('miete') or '0'} wird jetzt faellig."
     if field_type == "gemeinschaft":
         return "Dieses Gemeinschaftsfeld loest ein zufaelliges Ereignis fuer dich oder die ganze Runde aus."
@@ -125,7 +130,7 @@ def build_game_payload(game_state, current_player_id=None):
         popup_field = fields[pending_action["field_index"]]
         popup_player = pending_action["player_index"]
         popup_roll = pending_action.get("roll")
-        popup_hint = get_popup_hint(popup_field)
+        popup_hint = get_popup_hint(popup_field, players[popup_player] if popup_player is not None else None)
 
     display_roll = dice.get("current_roll") or popup_roll or dice.get("last_roll")
 

@@ -6,27 +6,27 @@
   <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="page page-home">
+<body class="page page-home theme-{{ settings.theme }}">
   <main class="app-dashboard">
     <header class="main-menu-header">
       <div class="brand-lockup">
         <div class="brand-mark" aria-hidden="true">SD</div>
         <div>
-          <div class="hero-badge">Launch Build</div>
+          <div class="hero-badge">Deluxe Edition</div>
           <h1>Spassmonopoly Deluxe</h1>
           <p class="panel-copy">Ein schneller digitaler Spieltisch fuer lokale Runden, Lobbys und gespeicherte Sessions.</p>
         </div>
       </div>
 
       <nav class="menu-tabs" aria-label="Hauptnavigation">
-        <a class="menu-tab active" href="#play">Spielen</a>
-        <a class="menu-tab" href="#saves">Saves</a>
-        <a class="menu-tab" href="#settings">Settings</a>
-        <a class="menu-tab" href="#about">Info</a>
+        <a class="menu-tab active" href="#play" data-home-tab="play">Spielen</a>
+        <a class="menu-tab" href="#saves" data-home-tab="saves">Saves</a>
+        <a class="menu-tab" href="#settings" data-home-tab="settings">Einstellungen</a>
+        <a class="menu-tab" href="#about" data-home-tab="about">Info</a>
       </nav>
     </header>
 
-    <section id="play" class="dashboard-grid">
+    <section id="play" class="dashboard-grid home-view active" data-home-view="play">
       <section class="menu-panel primary-menu-panel">
         <div class="panel-heading">
           <div>
@@ -55,7 +55,7 @@
 
         <div class="feature-row compact-features">
           <span class="feature-pill">2-8 Spieler</span>
-          <span class="feature-pill">Autosave</span>
+          <span class="feature-pill">Save Manager</span>
           <span class="feature-pill">Responsive Board</span>
         </div>
       </section>
@@ -82,7 +82,7 @@
       </section>
     </section>
 
-    <section id="saves" class="save-manager pro-save-manager" aria-labelledby="saveManagerTitle">
+    <section id="saves" class="save-manager pro-save-manager home-view" data-home-view="saves" aria-labelledby="saveManagerTitle" hidden>
       <div class="save-manager-heading">
         <div>
           <div class="hero-badge">Save Manager</div>
@@ -116,13 +116,13 @@
       {% else %}
       <div class="empty-product-state">
         <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
-        <strong>Noch keine Spielstaende</strong>
-        <p class="empty-note">Starte eine neue Runde oder oeffne die Lobby. Der erste Autosave erscheint danach hier.</p>
+            <strong>Noch keine Spielstaende</strong>
+            <p class="empty-note">Starte eine neue Runde oder oeffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
       </div>
       {% endif %}
     </section>
 
-    <section id="settings" class="dashboard-grid dashboard-grid-secondary">
+    <section id="settings" class="dashboard-grid dashboard-grid-secondary home-view" data-home-view="settings" hidden>
       <section class="menu-panel">
         <div class="hero-badge">Einstellungen</div>
         <h2>Spielgefuehl</h2>
@@ -143,13 +143,6 @@
             <select id="settingTheme">
               <option value="dark" {% if settings.theme == "dark" %}selected{% endif %}>Dunkel</option>
               <option value="light" {% if settings.theme == "light" %}selected{% endif %}>Hell</option>
-            </select>
-          </label>
-          <label class="setting-row">
-            <span>Autosave</span>
-            <select id="settingAutosave">
-              <option value="on" {% if settings.autosave == "on" %}selected{% endif %}>Ein</option>
-              <option value="off" {% if settings.autosave == "off" %}selected{% endif %}>Aus</option>
             </select>
           </label>
           <label class="setting-row">
@@ -175,6 +168,18 @@
         </div>
       </section>
     </section>
+
+    <section class="menu-panel home-view about-view" data-home-view="about" hidden>
+      <div class="hero-badge">Produkt</div>
+      <h2>Spassmonopoly Deluxe</h2>
+      <p class="panel-copy">Ein robuster digitaler Spieltisch fuer lokale Runden, Lobby-Spiel und gespeicherte Sessions. Kernlogik, Saves und Logs laufen serverseitig, die Oberflaeche priorisiert schnelle Entscheidungen am Tisch.</p>
+      <div class="feature-row compact-features">
+        <span class="feature-pill">Flask</span>
+        <span class="feature-pill">SQLAlchemy</span>
+        <span class="feature-pill">Save Manager</span>
+        <span class="feature-pill">Responsive Board</span>
+      </div>
+    </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -197,6 +202,43 @@
   <script>
     const toast = document.getElementById("toast");
     let activeSaveAction = null;
+    let audioContext = null;
+
+    function readSettingsForm() {
+      return {
+        volume: document.getElementById("settingVolume").value,
+        animations: document.getElementById("settingAnimations").value,
+        theme: document.getElementById("settingTheme").value,
+        speed: document.getElementById("settingSpeed").value,
+      };
+    }
+
+    function applySettings(settings) {
+      document.body.classList.toggle("theme-light", settings.theme === "light");
+      document.body.classList.toggle("theme-dark", settings.theme !== "light");
+      document.body.classList.toggle("reduce-motion", settings.animations === "off");
+      document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : "1");
+    }
+
+    function playUiSound(kind = "tap") {
+      const volume = Number(document.getElementById("settingVolume")?.value || 0) / 100;
+      if (!volume) return;
+      try {
+        audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = kind === "success" ? "triangle" : "sine";
+        oscillator.frequency.value = kind === "success" ? 660 : 440;
+        gain.gain.value = Math.min(0.09, volume * 0.09);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
+        oscillator.stop(audioContext.currentTime + 0.13);
+      } catch (error) {
+        return;
+      }
+    }
 
     function showToast(message) {
       toast.textContent = message;
@@ -217,6 +259,7 @@
       try {
         const data = await apiPost(`/api/save/${saveId}/load`);
         showToast(data.message || "Spielstand geladen.");
+        playUiSound("success");
         window.setTimeout(() => {
           window.location.href = data.redirect_url || "/board";
         }, 220);
@@ -275,6 +318,7 @@
         if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
         if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
         showToast(data.message || "Spielstand aktualisiert.");
+        playUiSound("success");
         window.setTimeout(() => window.location.reload(), 350);
       } catch (error) {
         showToast(error.message);
@@ -292,16 +336,22 @@
       event.preventDefault();
       try {
         const data = await apiPost("/api/settings", {
-          volume: document.getElementById("settingVolume").value,
-          animations: document.getElementById("settingAnimations").value,
-          theme: document.getElementById("settingTheme").value,
-          autosave: document.getElementById("settingAutosave").value,
-          speed: document.getElementById("settingSpeed").value,
+          ...readSettingsForm(),
         });
+        applySettings(data.settings);
         showToast(data.message || "Einstellungen gespeichert.");
+        playUiSound("success");
       } catch (error) {
         showToast(error.message);
       }
+    });
+
+    ["settingVolume", "settingAnimations", "settingTheme", "settingSpeed"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => applySettings(readSettingsForm()));
+      document.getElementById(id).addEventListener("change", () => {
+        applySettings(readSettingsForm());
+        playUiSound("tap");
+      });
     });
 
     document.getElementById("saveActionModal").addEventListener("click", (event) => {
@@ -311,6 +361,26 @@
     window.addEventListener("keydown", (event) => {
       if (event.key === "Escape") closeSaveAction();
     });
+
+    document.querySelectorAll("[data-home-tab]").forEach((tab) => {
+      tab.addEventListener("click", (event) => {
+        event.preventDefault();
+        const target = tab.dataset.homeTab;
+        document.querySelectorAll("[data-home-tab]").forEach((item) => item.classList.toggle("active", item === tab));
+        document.querySelectorAll("[data-home-view]").forEach((view) => {
+          const isActive = view.dataset.homeView === target;
+          view.classList.toggle("active", isActive);
+          view.hidden = !isActive;
+        });
+        window.history.replaceState(null, "", `#${target}`);
+      });
+    });
+
+    const initialTab = window.location.hash.replace("#", "");
+    if (initialTab) {
+      document.querySelector(`[data-home-tab="${initialTab}"]`)?.click();
+    }
+    applySettings(readSettingsForm());
   </script>
 </body>
 </html>

@@ -14,7 +14,6 @@ class GameSaveService:
         "volume": "70",
         "animations": "on",
         "theme": "dark",
-        "autosave": "on",
         "speed": "normal",
     }
 
@@ -422,7 +421,8 @@ class GameSaveService:
         settings = dict(GameSaveService.DEFAULT_GLOBAL_SETTINGS)
         rows = db.session.query(Setting).filter(Setting.game_save_id.is_(None)).all()
         for row in rows:
-            settings[str(row.key)] = str(row.value)
+            if str(row.key) in settings:
+                settings[str(row.key)] = str(row.value)
         return settings
 
     @staticmethod
@@ -439,7 +439,7 @@ class GameSaveService:
                     text_value = str(max(0, min(100, int(text_value))))
                 except ValueError:
                     text_value = allowed[key]
-            elif key in {"animations", "autosave"}:
+            elif key == "animations":
                 text_value = "on" if text_value in {"on", "true", "1", "yes"} else "off"
             elif key == "theme":
                 text_value = text_value if text_value in {"dark", "light"} else allowed[key]

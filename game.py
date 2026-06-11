@@ -384,6 +384,7 @@ def render_board():
         return render_template(
             "board.html",
             game_state=build_game_payload(game_state, current_player_id=session.get("player_id")),
+            settings=GameSaveService.get_global_settings(),
         )
 
 
@@ -724,6 +725,9 @@ def lobby_start():
             return jsonify({"ok": True, "redirect_url": url_for("spiel")})
 
         players = list(lobby_state.get("players", {}).items())
+        host_id = players[0][0] if players else None
+        if not session.get("player_id") or session.get("player_id") != host_id:
+            return json_error("Nur der Host kann die Runde starten.", 403)
         if len(players) < MIN_LOBBY_PLAYERS:
             return json_error("Mindestens 2 Spieler erforderlich")
         if not all(player.get("ready") for _, player in players):

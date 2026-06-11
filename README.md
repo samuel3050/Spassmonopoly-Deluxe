@@ -132,9 +132,9 @@ Manuelles Speichern:
 4. Bei Erfolg wird committed und die UI zeigt eine Erfolgsmeldung.
 5. Bei Fehler wird gerollbackt und die UI erhaelt eine Fehlermeldung.
 
-Autosave laeuft nach Wuerfelwurf, Bewegung, Feldaktion, Kartenereignis und
-Spielerwechsel, weil diese Aktionen nur dann erfolgreich antworten, wenn der
-neue State in der Datenbank persistiert wurde.
+Der laufende Backend-State wird nach Wuerfelwurf, Bewegung, Feldaktion,
+Kartenereignis und Spielerwechsel persistiert. Benannte Spielstaende entstehen
+gezielt ueber den Save Manager oder den Speichern-Dialog im Spiel.
 
 ## Entwicklung
 

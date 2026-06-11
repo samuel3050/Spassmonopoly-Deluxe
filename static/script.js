@@ -21,6 +21,15 @@ let lastSignature = "";
 let previousPositions = [...(state.positionen || [])];
 let eventSearchTerm = "";
 let eventTypeFilter = "all";
+let winnerAcknowledged = false;
+let userSettings = {
+  volume: "70",
+  animations: "on",
+  theme: "dark",
+  speed: "normal",
+  ...(window.appSettings || {}),
+};
+let audioContext = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -40,6 +49,48 @@ function eventTime(event) {
     return String(event.timestamp).slice(11, 19) || "--:--:--";
   }
   return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function animationsEnabled() {
+  return userSettings.animations !== "off";
+}
+
+function speedScale() {
+  if (userSettings.speed === "slow") return 1.45;
+  if (userSettings.speed === "fast") return 0.65;
+  return 1;
+}
+
+function scaledDuration(value) {
+  return Math.max(25, Math.round(value * speedScale()));
+}
+
+function applyUserSettings(settings = userSettings) {
+  userSettings = { ...userSettings, ...settings };
+  document.body.classList.toggle("theme-light", userSettings.theme === "light");
+  document.body.classList.toggle("theme-dark", userSettings.theme !== "light");
+  document.body.classList.toggle("reduce-motion", !animationsEnabled());
+  document.documentElement.style.setProperty("--motion-speed", String(speedScale()));
+}
+
+function playUiSound(kind = "tap") {
+  const volume = Math.max(0, Math.min(100, Number(userSettings.volume || 0))) / 100;
+  if (!volume) return;
+  try {
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = kind === "success" ? "triangle" : kind === "warn" ? "square" : "sine";
+    oscillator.frequency.value = kind === "success" ? 660 : kind === "warn" ? 220 : 440;
+    gain.gain.value = Math.min(0.08, volume * 0.08);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.12);
+    oscillator.stop(audioContext.currentTime + 0.13);
+  } catch (error) {
+    return;
+  }
 }
 
 function getField(fieldId) {
@@ -268,6 +319,24 @@ function renderEventLog() {
   });
 }
 
+function buildPrimaryActionMarkup(location = "center") {
+  const canAct = state.canAct !== false && state.gameStatus !== "finished";
+  const disabled = busy || !canAct;
+
+  if (state.gameStatus === "finished") {
+    return '<button type="button" class="primary-btn" disabled>Runde beendet</button>';
+  }
+  if (state.phase === "move") {
+    return `<button type="button" class="primary-btn" onclick="handleMove()" ${disabled ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>`;
+  }
+  if (state.phase === "field_action" && state.popupFeld) {
+    return `<button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld oeffnen</button>`;
+  }
+
+  const label = canAct ? (location === "mirror" ? "Jetzt wuerfeln" : "Wuerfeln") : "Warten";
+  return `<button type="button" class="primary-btn" onclick="handleRoll()" ${disabled ? "disabled" : ""}>${label}</button>`;
+}
+
 function renderQuickStats() {
   const highlights = state.highlights || {};
   refs.quickStats.innerHTML = [
@@ -299,20 +368,11 @@ function renderBoardInsights() {
 }
 
 function renderActionPanel() {
-  const canAct = state.canAct !== false && state.gameStatus !== "finished";
   const title = state.activePlayerName || "Bereit";
-  let actions = `<button type="button" class="primary-btn" onclick="handleRoll()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Wuerfeln" : "Warten"}</button>`;
-
-  if (state.gameStatus === "finished") {
-    actions = '<button type="button" class="primary-btn" disabled>Runde beendet</button>';
-  } else if (state.phase === "move") {
-    actions = `<button type="button" class="primary-btn" onclick="handleMove()" ${busy || !canAct ? "disabled" : ""}>${canAct ? "Figur bewegen" : "Warten"}</button>`;
-  } else if (state.phase === "field_action" && state.popupFeld) {
-    actions = `<button type="button" class="primary-btn" onclick="showPendingField()" ${busy ? "disabled" : ""}>Feld oeffnen</button>`;
-  }
 
   refs.phaseChip.textContent = getPhaseLabel();
   refs.centerPlayerName.textContent = title;
+  if (refs.topActivePlayer) refs.topActivePlayer.textContent = title ? `Am Zug: ${title}` : "Bereit";
   refs.currentFieldButton.disabled = state.phase !== "field_action" || busy;
   refs.turnSummary.innerHTML = `
     <div class="turn-summary-hero">
@@ -320,7 +380,13 @@ function renderActionPanel() {
       <span>${escapeHtml(getActionCopy())}</span>
     </div>
   `;
-  refs.commandActions.innerHTML = actions;
+  refs.commandActions.innerHTML = buildPrimaryActionMarkup("center");
+  if (refs.actionMirror) {
+    refs.actionMirror.innerHTML = `
+      <div class="action-mirror-copy">${escapeHtml(getActionCopy())}</div>
+      ${buildPrimaryActionMarkup("mirror")}
+    `;
+  }
 }
 
 function renderCenterCard() {
@@ -360,6 +426,7 @@ function renderApp() {
   renderCenterCard();
   renderBoardInsights();
   renderModal();
+  renderWinnerModal();
 }
 
 function setState(nextState, options = {}) {
@@ -384,7 +451,30 @@ function showToast(message) {
   refs.toast.textContent = message;
   refs.toast.classList.add("show");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => refs.toast.classList.remove("show"), 2400);
+  toastTimer = window.setTimeout(() => refs.toast.classList.remove("show"), scaledDuration(2400));
+}
+
+function getWinnerName() {
+  const event = state.lastEventEntry || {};
+  if (event.type === "winner" && event.player_id) {
+    const player = state.canonicalState?.players?.find((entry) => entry.id === event.player_id);
+    if (player?.name) return player.name;
+  }
+  const match = String(state.lastEvent || "").match(/Gewinner:\s*([^\n]+?)\s+gewinnt/i);
+  return match ? match[1] : (state.highlights?.leaderName || state.activePlayerName || "Gewinner");
+}
+
+function renderWinnerModal() {
+  if (!refs.winnerModal) return;
+  if (state.gameStatus !== "finished" || winnerAcknowledged) {
+    refs.winnerModal.classList.remove("open");
+    refs.winnerModal.setAttribute("aria-hidden", "true");
+    return;
+  }
+  refs.winnerTitle.textContent = `${getWinnerName()} gewinnt`;
+  refs.winnerCopy.textContent = state.lastEvent || "Die Runde ist beendet.";
+  refs.winnerModal.classList.add("open");
+  refs.winnerModal.setAttribute("aria-hidden", "false");
 }
 
 async function postJson(url, payload = null) {
@@ -441,6 +531,14 @@ async function refreshState({ silent = true } = {}) {
 function animateDice(roll) {
   if (!roll) return;
   window.clearInterval(diceTimer);
+  if (!animationsEnabled()) {
+    refs.w1.src = `/static/dice/${roll[0]}.png`;
+    refs.w2.src = `/static/dice/${roll[1]}.png`;
+    refs.diceDisplay.classList.remove("rolling");
+    refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
+    playUiSound("tap");
+    return;
+  }
   let ticks = 0;
   refs.diceDisplay.classList.add("rolling");
   refs.rollStatus.textContent = `${state.activePlayerName} wuerfelt ...`;
@@ -455,11 +553,13 @@ function animateDice(roll) {
       refs.w2.src = `/static/dice/${roll[1]}.png`;
       refs.diceDisplay.classList.remove("rolling");
       refs.rollStatus.textContent = `${state.activePlayerName} hat ${roll[0] + roll[1]} gewuerfelt.`;
+      playUiSound("tap");
     }
-  }, 65);
+  }, scaledDuration(65));
 }
 
 function openDrawer(key) {
+  if (!refs.drawers) return;
   closeDrawer();
   const drawer = refs.drawers[key];
   if (!drawer) return;
@@ -471,6 +571,7 @@ function openDrawer(key) {
 }
 
 function closeDrawer(key = null) {
+  if (!refs.drawers) return;
   if (key && activeDrawer !== key) {
     refs.drawers[key]?.classList.remove("open");
     refs.drawers[key]?.setAttribute("aria-hidden", "true");
@@ -532,6 +633,12 @@ function closeSaveModal() {
   refs.saveModal.setAttribute("aria-hidden", "true");
 }
 
+function closeWinnerModal() {
+  winnerAcknowledged = true;
+  refs.winnerModal?.classList.remove("open");
+  refs.winnerModal?.setAttribute("aria-hidden", "true");
+}
+
 async function handleRoll() {
   if (busy) return;
   setBusy(true);
@@ -546,6 +653,7 @@ async function handleRoll() {
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
+    playUiSound("warn");
   } finally {
     setBusy(false);
   }
@@ -558,12 +666,14 @@ async function handleMove() {
     const data = await postJson("/zug_ziehen");
     setState(data.state, { openPending: true, toast: data.state.lastEvent });
     lastSignature = getStateSignature(data.state);
+    playUiSound("tap");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
+    playUiSound("warn");
   } finally {
     setBusy(false);
   }
@@ -576,12 +686,14 @@ async function handleFieldAction(action, fieldId) {
     const data = await postJson("/feld_aktion", { aktion: action, feld: fieldId });
     setState(data.state, { closeModal: true, toast: data.state.lastEvent });
     lastSignature = getStateSignature(data.state);
+    playUiSound("success");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
+    playUiSound("warn");
   } finally {
     setBusy(false);
   }
@@ -596,6 +708,7 @@ async function submitSaveGame() {
   const name = refs.manualSaveName.value.trim();
   if (name.length < 2) {
     showToast("Bitte gib mindestens 2 Zeichen ein.");
+    playUiSound("warn");
     return;
   }
   setBusy(true);
@@ -604,12 +717,14 @@ async function submitSaveGame() {
     closeSaveModal();
     setState(data.state, { toast: data.message || "Spielstand gespeichert." });
     lastSignature = getStateSignature(data.state);
+    playUiSound("success");
   } catch (error) {
     if (error.state) {
       setState(error.state);
       lastSignature = getStateSignature(error.state);
     }
     showToast(error.message);
+    playUiSound("warn");
   } finally {
     setBusy(false);
   }
@@ -620,9 +735,11 @@ async function exitGame(mode) {
   setBusy(true);
   try {
     const data = await postJson("/api/exit-game", { mode });
+    playUiSound("success");
     window.location.href = data.redirect_url || "/";
   } catch (error) {
     showToast(error.message);
+    playUiSound("warn");
     closeExitModal();
   } finally {
     setBusy(false);
@@ -633,6 +750,9 @@ function cacheRefs() {
   refs.modal = document.getElementById("fieldModal");
   refs.exitModal = document.getElementById("exitModal");
   refs.saveModal = document.getElementById("saveModal");
+  refs.winnerModal = document.getElementById("winnerModal");
+  refs.winnerTitle = document.getElementById("winnerTitle");
+  refs.winnerCopy = document.getElementById("winnerCopy");
   refs.manualSaveName = document.getElementById("manualSaveName");
   refs.modalContent = document.getElementById("fieldModalContent");
   refs.boardGrid = document.getElementById("boardGrid");
@@ -652,20 +772,23 @@ function cacheRefs() {
   refs.ownershipCountChip = document.getElementById("ownershipCountChip");
   refs.centerTitle = document.getElementById("centerTitle");
   refs.centerPlayerName = document.getElementById("centerPlayerName");
+  refs.topActivePlayer = document.getElementById("topActivePlayer");
   refs.centerCopy = document.getElementById("centerCopy");
   refs.rollStatus = document.getElementById("rollStatus");
   refs.boardInsights = document.getElementById("boardInsights");
+  refs.actionMirror = document.getElementById("actionMirror");
   refs.toast = document.getElementById("toast");
   refs.w1 = document.getElementById("w1");
   refs.w2 = document.getElementById("w2");
   refs.diceDisplay = document.getElementById("diceDisplay");
   refs.drawerScrim = document.getElementById("drawerScrim");
-  refs.drawers = {
+  const drawers = {
     players: document.getElementById("playersPanel"),
     ownership: document.getElementById("ownershipPanel"),
     log: document.getElementById("logPanel"),
     help: document.getElementById("helpPanel"),
   };
+  refs.drawers = Object.values(drawers).every(Boolean) ? drawers : null;
   refs.drawerButtons = {
     players: document.getElementById("playersPanelButton"),
     ownership: document.getElementById("ownershipPanelButton"),
@@ -687,7 +810,10 @@ function bindEvents() {
   refs.saveModal.addEventListener("click", (event) => {
     if (event.target === refs.saveModal) closeSaveModal();
   });
-  refs.drawerScrim.addEventListener("click", () => closeDrawer());
+  refs.winnerModal?.addEventListener("click", (event) => {
+    if (event.target === refs.winnerModal) closeWinnerModal();
+  });
+  refs.drawerScrim?.addEventListener("click", () => closeDrawer());
   refs.eventSearch.addEventListener("input", (event) => {
     eventSearchTerm = event.target.value.trim().toLowerCase();
     renderEventLog();
@@ -696,12 +822,13 @@ function bindEvents() {
     eventTypeFilter = event.target.value;
     renderEventLog();
   });
-  DRAWER_KEYS.forEach((key) => refs.drawerButtons[key].addEventListener("click", () => toggleDrawer(key)));
+  DRAWER_KEYS.forEach((key) => refs.drawerButtons[key]?.addEventListener("click", () => toggleDrawer(key)));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeFieldModal();
       closeExitModal();
       closeSaveModal();
+      closeWinnerModal();
       closeDrawer();
     }
   });
@@ -709,6 +836,7 @@ function bindEvents() {
 
 function bootBoard() {
   cacheRefs();
+  applyUserSettings();
   bindEvents();
   renderApp();
   lastSignature = getStateSignature(state);
@@ -722,11 +850,17 @@ function bootBoard() {
 }
 
 document.addEventListener("DOMContentLoaded", bootBoard);
+window.addEventListener("pagehide", () => {
+  window.clearInterval(pollTimer);
+  window.clearInterval(diceTimer);
+  window.clearTimeout(toastTimer);
+});
 
 window.closeDrawer = closeDrawer;
 window.closeFieldModal = closeFieldModal;
 window.closeExitModal = closeExitModal;
 window.closeSaveModal = closeSaveModal;
+window.closeWinnerModal = closeWinnerModal;
 window.showFieldInfo = showFieldInfo;
 window.showPendingField = showPendingField;
 window.handleFieldAction = handleFieldAction;

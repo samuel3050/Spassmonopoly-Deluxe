@@ -32,7 +32,7 @@
           <div><span>Modus</span><strong>Classic Deluxe</strong></div>
           <div><span>Spieler</span><strong>{{ min_players }}-{{ max_players }}</strong></div>
           <div><span>Start</span><strong>Alle bereit</strong></div>
-          <div><span>Speichern</span><strong>Autosave aktiv</strong></div>
+          <div><span>Speichern</span><strong>Save Manager</strong></div>
         </div>
       </aside>
 
@@ -212,10 +212,13 @@
         renderProgress(data.players);
         const startBtn = document.getElementById("startBtn");
         const startHint = document.getElementById("startHint");
+        const isHost = currentPlayerId && data.host_id === currentPlayerId;
         const hasEnough = data.players.length >= minPlayers;
-        startBtn.disabled = data.game_started || !data.all_ready || !hasEnough;
+        startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
         startBtn.textContent = data.game_started ? "Spiel laeuft" : "Spiel starten";
-        if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
+        if (!currentPlayerId) startHint.textContent = "Bitte erst beitreten.";
+        else if (!isHost) startHint.textContent = "Nur der Host kann die Runde starten.";
+        else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
         else if (!data.all_ready) startHint.textContent = "Alle Spieler muessen bereit sein.";
         else startHint.textContent = "Alles bereit. Die Runde kann starten.";
       } catch (error) {
