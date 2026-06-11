@@ -25,8 +25,8 @@
         <div class="hero-badge">Spielinfo</div>
         <h2>Warteraum</h2>
         <div class="lobby-code-box">
-          <span>Raum</span>
-          <strong>Standard</strong>
+          <span>Join Code</span>
+          <strong id="joinCode">{{ join_code or "------" }}</strong>
         </div>
         <div class="setting-list">
           <div><span>Modus</span><strong>Classic Deluxe</strong></div>
@@ -51,6 +51,7 @@
           <label class="field-label" for="playerName">Dein Anzeigename</label>
           <div class="join-input-row">
             <input type="text" id="playerName" placeholder="z.B. Samuel" required minlength="2" maxlength="24" autocomplete="off">
+            <input type="text" id="joinCodeInput" placeholder="Code" maxlength="6" autocomplete="off">
             <button type="submit" class="primary-btn">Beitreten</button>
           </div>
           <p id="joinHint" class="input-hint">2 bis 24 Zeichen, jeder Name nur einmal.</p>
@@ -73,10 +74,10 @@
 
         <div class="action-stack">
           <form method="post" action="{{ url_for('lobby_continue') }}">
-            <button type="submit" class="secondary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>Letzte Runde fortsetzen</button>
+            <button id="continueBtn" type="submit" class="secondary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>Letzte Runde fortsetzen</button>
           </form>
           <form method="post" action="{{ url_for('lobby_new') }}">
-            <button type="submit" class="secondary-btn full-width">Lobby zurücksetzen</button>
+            <button id="resetBtn" type="submit" class="secondary-btn full-width">Lobby zurücksetzen</button>
           </form>
           <button id="refreshBtn" class="secondary-btn full-width" onclick="updateLobby()">Aktualisieren</button>
         </div>
@@ -89,9 +90,11 @@
     </section>
   </main>
 
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script>
     let currentPlayerId = {{ current_player_id|tojson }};
     let autoRefreshInterval = null;
+    const audio = new AudioManager({});
     const minPlayers = {{ min_players }};
     const maxPlayers = {{ max_players }};
     const palette = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
@@ -123,6 +126,7 @@
     async function joinGame(event) {
       event.preventDefault();
       const input = document.getElementById("playerName");
+      const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
       const name = input.value.trim();
       const validation = validateName(name);
       if (validation) {
@@ -134,7 +138,7 @@
         const response = await fetch("/lobby/join", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: `name=${encodeURIComponent(name)}`,
+          body: `name=${encodeURIComponent(name)}&join_code=${encodeURIComponent(code)}`,
         });
         const data = await response.json();
         if (!response.ok || !data.ok) {
@@ -191,6 +195,7 @@
 
         const playersList = document.getElementById("playersList");
         document.getElementById("playerCount").textContent = data.players.length;
+        document.getElementById("joinCode").textContent = data.join_code || "------";
 
         if (data.game_started && currentPlayerId) {
           window.location.href = data.redirect_url || "/board";
@@ -212,6 +217,8 @@
         renderProgress(data.players);
         const startBtn = document.getElementById("startBtn");
         const startHint = document.getElementById("startHint");
+        const continueBtn = document.getElementById("continueBtn");
+        const resetBtn = document.getElementById("resetBtn");
         const isHost = currentPlayerId && data.host_id === currentPlayerId;
         const hasEnough = data.players.length >= minPlayers;
         startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
@@ -221,6 +228,10 @@
         else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
         else if (!data.all_ready) startHint.textContent = "Alle Spieler müssen bereit sein.";
         else startHint.textContent = "Alles bereit. Die Runde kann starten.";
+        continueBtn.hidden = !isHost;
+        continueBtn.disabled = !isHost || !data.has_saved_game;
+        resetBtn.hidden = Boolean(data.players.length) && !isHost;
+        resetBtn.disabled = Boolean(data.players.length) && !isHost;
       } catch (error) {
         showStatus(error.message || "Lobby-Update fehlgeschlagen.", "warning");
       }
@@ -273,6 +284,20 @@
 
     updateLobby();
     startAutoRefresh();
+    document.addEventListener("pointerdown", () => {
+      audio.unlock();
+      audio.startMusic();
+    }, { once: true });
+    document.addEventListener("keydown", () => {
+      audio.unlock();
+      audio.startMusic();
+    }, { once: true });
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
+    });
   </script>
 </body>
 </html>

@@ -44,9 +44,13 @@ class GameSave(Base):
         state = self.get_game_state()
         players = state.get("players", [])
         game = state.get("game", {})
+        identity = state.get("identity") or {}
         active_index = int(state.get("active_player_index", 0) or 0) if players else None
         return {
             "id": self.id,
+            "game_id": identity.get("game_id"),
+            "join_code": identity.get("join_code"),
+            "host_id": identity.get("host_id"),
             "name": self.name,
             "description": self.description,
             "created_at": self.created_at.isoformat(),

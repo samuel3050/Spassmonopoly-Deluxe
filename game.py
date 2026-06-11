@@ -1,7 +1,9 @@
 import copy
 import os
 import logging
+import random
 import re
+import string
 from threading import RLock
 from uuid import uuid4
 
@@ -48,6 +50,7 @@ APP_NAME = "Spassmonopoly Deluxe"
 ROOM_ID = os.getenv("GAME_ROOM_ID", DEFAULT_ROOM_ID)
 MIN_LOBBY_PLAYERS = 2
 MAX_LOBBY_PLAYERS = 8
+JOIN_CODE_LENGTH = 6
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "spassmonopoly-deluxe-dev-key")
@@ -71,12 +74,35 @@ lobby_state = {
 state_lock = RLock()
 
 
-def default_lobby_state(room_id=ROOM_ID):
+def make_join_code():
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(random.choice(alphabet) for _ in range(JOIN_CODE_LENGTH))
+
+
+def default_lobby_state(room_id=ROOM_ID, join_code=None, host_id=None):
     return {
         "players": {},
         "game_started": False,
         "room_id": room_id,
+        "join_code": join_code or make_join_code(),
+        "host_id": host_id,
     }
+
+
+def ensure_game_identity(game_state, room_id=ROOM_ID, host_id=None, join_code=None):
+    game_state = copy.deepcopy(game_state)
+    players = game_state.get("players") or []
+    room = game_state.setdefault("room", {"id": room_id, "mode": "local"})
+    room.setdefault("id", room_id)
+    identity = game_state.setdefault("identity", {})
+    identity.setdefault("game_id", str(uuid4()))
+    identity["join_code"] = identity.get("join_code") or join_code or room.get("join_code") or make_join_code()
+    identity["host_id"] = identity.get("host_id") or host_id or room.get("host_id")
+    if not identity.get("host_id") and players:
+        identity["host_id"] = players[0].get("id")
+    room["join_code"] = identity["join_code"]
+    room["host_id"] = identity.get("host_id")
+    return game_state
 
 
 def is_canonical_game_state(raw_state):
@@ -92,11 +118,18 @@ def is_canonical_game_state(raw_state):
 
 
 def infer_lobby_state(game_state, room_id=ROOM_ID):
+    identity = game_state.get("identity") or {}
     saved_lobby = game_state.get("lobby")
     if isinstance(saved_lobby, dict):
-        lobby = default_lobby_state(room_id)
+        lobby = default_lobby_state(
+            room_id,
+            join_code=identity.get("join_code") or saved_lobby.get("join_code"),
+            host_id=identity.get("host_id") or saved_lobby.get("host_id"),
+        )
         lobby.update(copy.deepcopy(saved_lobby))
         lobby["room_id"] = room_id
+        lobby["join_code"] = identity.get("join_code") or lobby.get("join_code") or make_join_code()
+        lobby["host_id"] = identity.get("host_id") or lobby.get("host_id")
         lobby["game_started"] = bool(game_state.get("players"))
         return lobby
 
@@ -108,6 +141,8 @@ def infer_lobby_state(game_state, room_id=ROOM_ID):
         "players": players,
         "game_started": bool(players),
         "room_id": room_id,
+        "join_code": identity.get("join_code") or make_join_code(),
+        "host_id": identity.get("host_id") or next(iter(players), None),
     }
 
 
@@ -196,6 +231,8 @@ def normalize_legacy_server_save(snapshot, room_id=ROOM_ID):
         lobby = infer_lobby_state(state, room_id)
     lobby["game_started"] = True
     state["lobby"] = lobby
+    state = ensure_game_identity(state, room_id, host_id=lobby.get("host_id"), join_code=lobby.get("join_code"))
+    state["lobby"] = infer_lobby_state(state, room_id)
     return ensure_state_defaults(state)
 
 
@@ -207,6 +244,7 @@ def normalize_game_state(raw_state, room_id=ROOM_ID):
         state["room"].setdefault("mode", "local")
         state.setdefault("lobby", infer_lobby_state(state, room_id))
         state = ensure_state_defaults(state)
+        state = ensure_game_identity(state, room_id, host_id=state.get("lobby", {}).get("host_id"), join_code=state.get("lobby", {}).get("join_code"))
         state["board"]["fields"] = ensure_field_shape(state["board"]["fields"])
         if state["event_log"]:
             state["last_event_entry"] = state["event_log"][-1]
@@ -248,7 +286,10 @@ def save_game_state(room_id=ROOM_ID, game_state=None):
     game_state = copy.deepcopy(game_state)
     game_state.setdefault("room", {"id": room_id, "mode": "local"})
     game_state["room"].setdefault("id", room_id)
+    game_state = ensure_game_identity(game_state, room_id, host_id=lobby_state.get("host_id"), join_code=lobby_state.get("join_code"))
     if game_state["room"].get("mode") == "lobby":
+        lobby_state["host_id"] = get_host_id(game_state)
+        lobby_state["join_code"] = game_state["identity"]["join_code"]
         game_state["lobby"] = copy.deepcopy(lobby_state)
     else:
         game_state.setdefault("lobby", copy.deepcopy(lobby_state))
@@ -290,7 +331,14 @@ def create_new_game(room_id=ROOM_ID, players=None, player_ids=None, mode="local"
         for player, player_id in zip(game_state["players"], player_ids):
             player["id"] = str(player_id)
 
+    host_id = str(player_ids[0]) if player_ids else game_state["players"][0]["id"]
     game_state["room"] = {"id": room_id, "mode": mode}
+    game_state = ensure_game_identity(
+        game_state,
+        room_id,
+        host_id=host_id,
+        join_code=lobby_state.get("join_code"),
+    )
     for player in game_state["players"]:
         game_state = push_event(
             game_state,
@@ -300,6 +348,8 @@ def create_new_game(room_id=ROOM_ID, players=None, player_ids=None, mode="local"
             player_id=player["id"],
         )
     if mode == "lobby":
+        lobby_state["host_id"] = host_id
+        lobby_state["join_code"] = game_state["identity"]["join_code"]
         lobby_state["game_started"] = True
         game_state["lobby"] = copy.deepcopy(lobby_state)
     return save_game_state(room_id, game_state)
@@ -330,6 +380,52 @@ def session_player_is_known(game_state=None):
     return get_current_player_index(game_state) is not None
 
 
+def get_host_id(game_state=None):
+    game_state = game_state or get_current_state()
+    if not game_state:
+        return lobby_state.get("host_id") or next(iter(lobby_state.get("players", {})), None)
+
+    identity = game_state.get("identity") or {}
+    room = game_state.get("room") or {}
+    lobby = game_state.get("lobby") or {}
+    host_id = identity.get("host_id") or room.get("host_id") or lobby.get("host_id")
+    if host_id:
+        return host_id
+    players = game_state.get("players") or []
+    return players[0].get("id") if players else None
+
+
+def state_player_ids(game_state):
+    return {player.get("id") for player in game_state.get("players", [])}
+
+
+def current_user_is_host(game_state=None):
+    game_state = game_state or get_current_state()
+    if not game_state:
+        return False
+    if game_state.get("room", {}).get("mode") != "lobby":
+        return True
+    return bool(session.get("player_id") and session.get("player_id") == get_host_id(game_state))
+
+
+def require_host(game_state=None):
+    game_state = game_state or get_current_state()
+    if current_user_is_host(game_state):
+        return None
+    return json_error("Nur der Host darf diese Aktion ausfuehren.", 403)
+
+
+def require_saved_game_host(game_state, allow_unbound=True):
+    if game_state.get("room", {}).get("mode") != "lobby":
+        return None
+    player_id = session.get("player_id")
+    if player_id == get_host_id(game_state):
+        return None
+    if allow_unbound and (not player_id or player_id not in state_player_ids(game_state)):
+        return None
+    return json_error("Nur der Host darf diese Aktion ausfuehren.", 403)
+
+
 def game_requires_rejoin(game_state=None):
     game_state = game_state or get_current_state()
     return bool(game_state and game_state.get("room", {}).get("mode") == "lobby" and not session_player_is_known(game_state))
@@ -349,6 +445,8 @@ def bind_session_to_player(game_state, player_id):
     session["player_id"] = player["id"]
     session["player_name"] = player["name"]
     session["room_id"] = game_state.get("room", {}).get("id", ROOM_ID)
+    lobby_state["host_id"] = get_host_id(game_state)
+    lobby_state["join_code"] = (game_state.get("identity") or {}).get("join_code") or lobby_state.get("join_code")
     lobby_state.setdefault("players", {}).setdefault(player["id"], {"name": player["name"], "ready": True})
     lobby_state["players"][player["id"]]["session_id"] = session_id
     return player
@@ -472,10 +570,14 @@ def api_load_save(save_id):
             normalized = normalize_game_state(game_state, ROOM_ID)
             if normalized is None:
                 return json_error("Spielstand ist nicht spielbar", 422)
+            host_error = require_saved_game_host(normalized)
+            if host_error:
+                return host_error
             lobby_state.clear()
             lobby_state.update(infer_lobby_state(normalized, ROOM_ID))
+            if normalized.get("room", {}).get("mode") == "lobby":
+                bind_session_to_player(normalized, get_host_id(normalized))
             save_game_state(ROOM_ID, normalized)
-            session.clear()
             return jsonify({
                 "ok": True,
                 "message": f"'{game_save.name}' geladen",
@@ -495,6 +597,9 @@ def api_save_current():
 
     with state_lock, app.app_context():
         try:
+            host_error = require_host(get_current_state())
+            if host_error:
+                return host_error
             payload = request.get_json(silent=True) or {}
             requested_name = payload.get("name")
             save_name = clean_save_name(requested_name) if requested_name else None
@@ -530,6 +635,9 @@ def api_exit_game():
 
     with state_lock, app.app_context():
         try:
+            host_error = require_host(get_current_state())
+            if host_error:
+                return host_error
             if mode == "save" and has_saved_game(ROOM_ID):
                 save_current_state_with_event("Spiel gespeichert und beendet.", event_type="game_exit")
             session.clear()
@@ -549,6 +657,15 @@ def api_rename_save(save_id):
         new_name = clean_save_name(data.get("name", ""))
 
         with app.app_context():
+            source_save = GameSaveService.load_save(save_id)
+            if not source_save:
+                return json_error("Spielstand nicht gefunden", 404)
+            normalized = normalize_game_state(source_save.get_game_state(), ROOM_ID)
+            if normalized is None:
+                return json_error("Spielstand ist nicht spielbar", 422)
+            host_error = require_saved_game_host(normalized)
+            if host_error:
+                return host_error
             game_save = GameSaveService.rename_save(save_id, new_name)
             if not game_save:
                 return json_error("Spielstand nicht gefunden", 404)
@@ -570,6 +687,15 @@ def api_delete_save(save_id):
     """Delete a saved game."""
     try:
         with app.app_context():
+            source_save = GameSaveService.load_save(save_id)
+            if not source_save:
+                return json_error("Spielstand nicht gefunden", 404)
+            normalized = normalize_game_state(source_save.get_game_state(), ROOM_ID)
+            if normalized is None:
+                return json_error("Spielstand ist nicht spielbar", 422)
+            host_error = require_saved_game_host(normalized)
+            if host_error:
+                return host_error
             success = GameSaveService.delete_save(save_id)
             if not success:
                 return json_error("Spielstand nicht gefunden", 404)
@@ -593,6 +719,12 @@ def api_duplicate_save(save_id):
             source_save = GameSaveService.load_save(save_id)
             if not source_save:
                 return json_error("Spielstand nicht gefunden", 404)
+            normalized = normalize_game_state(source_save.get_game_state(), ROOM_ID)
+            if normalized is None:
+                return json_error("Spielstand ist nicht spielbar", 422)
+            host_error = require_saved_game_host(normalized)
+            if host_error:
+                return host_error
             new_name = clean_save_name(data.get("name"), fallback=f"Kopie von {source_save.name}")
             game_save = GameSaveService.duplicate_save(save_id, new_name)
             if not game_save:
@@ -631,6 +763,9 @@ def api_settings():
 def index():
     if request.method == "POST":
         with state_lock:
+            current_state = get_current_state()
+            if current_state and current_state.get("room", {}).get("mode") == "lobby" and not current_user_is_host(current_state):
+                return "Nur der Host darf eine neue Runde starten.", 403
             delete_saved_game_state(ROOM_ID)
             player_count = parse_player_count(request.form.get("anzahl"))
             session.clear()
@@ -683,6 +818,7 @@ def lobby_page():
             "lobby.html",
             has_saved_game=has_saved_game(ROOM_ID),
             current_player_id=session.get("player_id"),
+            join_code=lobby_state.get("join_code"),
             min_players=MIN_LOBBY_PLAYERS,
             max_players=MAX_LOBBY_PLAYERS,
         )
@@ -696,8 +832,13 @@ def lobby_join():
             name = clean_lobby_name(request.form.get("name", ""))
         except ValueError as exc:
             return json_error(str(exc))
+        requested_code = str(request.form.get("join_code", "") or "").strip().upper()
 
         current_game = get_current_state()
+        if current_game and requested_code:
+            expected_code = (current_game.get("identity") or {}).get("join_code")
+            if expected_code and requested_code != expected_code:
+                return json_error("Join Code passt nicht zu diesem Spiel.", 404)
         existing_player = None
         if current_game:
             for player in current_game.get("players", []):
@@ -739,6 +880,9 @@ def lobby_join():
             "session_id": session_id,
         }
         lobby_state["room_id"] = ROOM_ID
+        if not lobby_state.get("host_id"):
+            lobby_state["host_id"] = player_id
+        lobby_state.setdefault("join_code", make_join_code())
         lobby_state["game_started"] = False
         session["player_id"] = player_id
         session["player_name"] = name
@@ -761,8 +905,8 @@ def lobby_ready():
 @app.route("/lobby/state", methods=["GET"])
 def lobby_state_api():
     with state_lock, app.app_context():
-        load_game_state(ROOM_ID)
-        host_id = next(iter(lobby_state.get("players", {})), None)
+        current_game = load_game_state(ROOM_ID)
+        host_id = get_host_id(current_game)
         players = [
             {
                 "id": player_id,
@@ -785,6 +929,7 @@ def lobby_state_api():
                 "min_players": MIN_LOBBY_PLAYERS,
                 "max_players": MAX_LOBBY_PLAYERS,
                 "host_id": host_id,
+                "join_code": (current_game.get("identity") or {}).get("join_code") if current_game else lobby_state.get("join_code"),
                 "redirect_url": url_for("spiel"),
             }
         )
@@ -797,7 +942,7 @@ def lobby_start():
             return jsonify({"ok": True, "redirect_url": url_for("spiel")})
 
         players = list(lobby_state.get("players", {}).items())
-        host_id = players[0][0] if players else None
+        host_id = lobby_state.get("host_id") or (players[0][0] if players else None)
         if not session.get("player_id") or session.get("player_id") != host_id:
             return json_error("Nur der Host kann die Runde starten.", 403)
         if len(players) < MIN_LOBBY_PLAYERS:
@@ -818,8 +963,12 @@ def lobby_continue():
         game_state = load_game_state(ROOM_ID)
         if game_state is None:
             return redirect(url_for("lobby_page"))
+        if lobby_state.get("players") and not current_user_is_host(game_state):
+            return "Nur der Host darf einen Spielstand laden.", 403
 
         lobby_state["game_started"] = True
+        lobby_state["host_id"] = get_host_id(game_state)
+        lobby_state["join_code"] = (game_state.get("identity") or {}).get("join_code") or lobby_state.get("join_code")
         game_state["room"]["mode"] = "lobby"
         game_state["lobby"] = copy.deepcopy(lobby_state)
         save_game_state(ROOM_ID, game_state)
@@ -831,6 +980,10 @@ def lobby_continue():
 @app.route("/lobby/new", methods=["POST"])
 def lobby_new():
     with state_lock:
+        current_state = get_current_state()
+        active_lobby_game = bool(current_state and current_state.get("room", {}).get("mode") == "lobby") or bool(lobby_state.get("game_started"))
+        if active_lobby_game and lobby_state.get("players") and not current_user_is_host(current_state):
+            return "Nur der Host darf die Lobby zuruecksetzen.", 403
         session.clear()
         lobby_state.clear()
         lobby_state.update(default_lobby_state(ROOM_ID))
@@ -988,6 +1141,8 @@ def feld_aktion():
 def neues_spiel():
     with state_lock:
         previous_state = get_current_state()
+        if previous_state and previous_state.get("room", {}).get("mode") == "lobby" and not current_user_is_host(previous_state):
+            return "Nur der Host darf eine neue Runde starten.", 403
         return_to_lobby = (
             bool(session.get("player_id"))
             or (previous_state or {}).get("room", {}).get("mode") == "lobby"

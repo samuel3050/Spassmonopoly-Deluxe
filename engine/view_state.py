@@ -118,6 +118,8 @@ def build_game_payload(game_state, current_player_id=None):
     active_index = game_state.get("active_player_index", 0)
     current_player_index = get_current_player_index(game_state, current_player_id)
     lobby_mode = game_state.get("room", {}).get("mode") == "lobby"
+    identity = game_state.get("identity") or {}
+    host_id = identity.get("host_id") or game_state.get("room", {}).get("host_id")
     game_status = game_state.get("game", {}).get("status", "running")
     event_log = normalize_event_log(game_state.get("event_log", []))
     last_event_entry = game_state.get("last_event_entry") or (event_log[-1] if event_log else None)
@@ -141,6 +143,9 @@ def build_game_payload(game_state, current_player_id=None):
         "spieler": [player["name"] for player in players],
         "aktiver": active_index,
         "currentPlayerIndex": current_player_index,
+        "hostId": host_id,
+        "joinCode": identity.get("join_code") or game_state.get("room", {}).get("join_code"),
+        "isHost": (not lobby_mode) or bool(current_player_id and current_player_id == host_id),
         "canAct": (game_status != "finished") and (True if not lobby_mode else current_player_index == active_index),
         "activePlayerName": get_active_player_name(game_state),
         "felder": fields,

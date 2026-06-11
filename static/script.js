@@ -415,6 +415,7 @@ function renderApp() {
   renderBoardInsights();
   renderModal();
   renderWinnerModal();
+  renderAdminVisibility();
 }
 
 function setState(nextState, options = {}) {
@@ -570,6 +571,11 @@ function showPendingField() {
 }
 
 function openExitModal() {
+  if (!state.isHost) {
+    showToast("Nur der Host darf das Spiel beenden.");
+    audio?.play("warn");
+    return;
+  }
   refs.exitModal.classList.add("open");
   refs.exitModal.setAttribute("aria-hidden", "false");
 }
@@ -580,6 +586,11 @@ function closeExitModal() {
 }
 
 function openSaveModal() {
+  if (!state.isHost) {
+    showToast("Nur der Host darf speichern.");
+    audio?.play("warn");
+    return;
+  }
   refs.saveModal.classList.add("open");
   refs.saveModal.setAttribute("aria-hidden", "false");
   refs.manualSaveName.focus();
@@ -658,10 +669,20 @@ async function handleFieldAction(action, fieldId) {
 }
 
 function saveGame() {
+  if (!state.isHost) {
+    showToast("Nur der Host darf speichern.");
+    audio?.play("warn");
+    return;
+  }
   openSaveModal();
 }
 
 async function submitSaveGame() {
+  if (!state.isHost) {
+    showToast("Nur der Host darf speichern.");
+    audio?.play("warn");
+    return;
+  }
   if (busy) return;
   const name = refs.manualSaveName.value.trim();
   if (name.length < 2) {
@@ -689,6 +710,11 @@ async function submitSaveGame() {
 }
 
 async function exitGame(mode) {
+  if (!state.isHost) {
+    showToast("Nur der Host darf das Spiel beenden.");
+    audio?.play("warn");
+    return;
+  }
   if (busy) return;
   setBusy(true);
   try {
@@ -726,6 +752,7 @@ function cacheRefs() {
   refs.currentFieldButton = document.getElementById("currentFieldButton");
   refs.saveGameButton = document.getElementById("saveGameButton");
   refs.exitGameButton = document.getElementById("exitGameButton");
+  refs.hostOnlyControls = document.querySelectorAll("[data-host-only]");
   refs.playerCountChip = document.getElementById("playerCountChip");
   refs.ownershipCountChip = document.getElementById("ownershipCountChip");
   refs.centerTitle = document.getElementById("centerTitle");
@@ -739,6 +766,17 @@ function cacheRefs() {
   refs.w1 = document.getElementById("w1");
   refs.w2 = document.getElementById("w2");
   refs.diceDisplay = document.getElementById("diceDisplay");
+}
+
+function renderAdminVisibility() {
+  refs.hostOnlyControls?.forEach((element) => {
+    const isHost = state.isHost === true;
+    element.hidden = !isHost;
+    if ("disabled" in element) element.disabled = !isHost;
+    element.querySelectorAll?.("button,input,select").forEach((control) => {
+      control.disabled = !isHost;
+    });
+  });
 }
 
 function bindEvents() {

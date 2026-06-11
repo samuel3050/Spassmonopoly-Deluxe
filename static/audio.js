@@ -21,6 +21,9 @@ class AudioManager {
     if (this.music) {
       this.music.gain.gain.value = this.musicVolume() * 0.22;
     }
+    if (this.started && !this.music && this.masterVolume() && this.musicVolume()) {
+      this.startMusic();
+    }
   }
 
   masterVolume() {

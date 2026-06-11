@@ -1,3 +1,7 @@
+import copy
+import random
+import string
+from uuid import uuid4
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
@@ -19,6 +23,27 @@ class GameSaveService:
         "theme": "dark",
         "speed": "normal",
     }
+
+    @staticmethod
+    def _make_join_code() -> str:
+        alphabet = string.ascii_uppercase + string.digits
+        return "".join(random.choice(alphabet) for _ in range(6))
+
+    @staticmethod
+    def clone_state_for_duplicate(game_state: Dict[str, Any]) -> Dict[str, Any]:
+        cloned = copy.deepcopy(game_state)
+        identity = dict(cloned.get("identity") or {})
+        identity["game_id"] = str(uuid4())
+        identity["join_code"] = GameSaveService._make_join_code()
+        if not identity.get("host_id"):
+            players = cloned.get("players") or []
+            if players:
+                identity["host_id"] = players[0].get("id")
+        cloned["identity"] = identity
+        cloned.setdefault("room", {})
+        cloned["room"]["join_code"] = identity["join_code"]
+        cloned["room"]["host_id"] = identity.get("host_id")
+        return cloned
 
     @staticmethod
     def validate_game_state(game_state: Dict[str, Any]) -> None:
@@ -366,7 +391,7 @@ class GameSaveService:
                 name=new_name,
                 description=f"Copy of {source_save.name}",
             )
-            source_state = source_save.get_game_state()
+            source_state = GameSaveService.clone_state_for_duplicate(source_save.get_game_state())
             GameSaveService.validate_game_state(source_state)
             new_save.set_game_state(source_state)
             GameSaveService._sync_projection(new_save, source_state)

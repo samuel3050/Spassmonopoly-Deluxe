@@ -23,10 +23,10 @@
       </div>
 
       <div class="dock-actions">
-        <button id="saveGameButton" type="button" class="secondary-btn">Speichern</button>
-        <button id="exitGameButton" type="button" class="secondary-btn">Beenden</button>
-        <form method="post" action="{{ url_for('neues_spiel') }}">
-          <button type="submit" class="secondary-btn">Neue Runde</button>
+        <button id="saveGameButton" data-host-only type="button" class="secondary-btn" {% if not game_state.isHost %}hidden disabled{% endif %}>Speichern</button>
+        <button id="exitGameButton" data-host-only type="button" class="secondary-btn" {% if not game_state.isHost %}hidden disabled{% endif %}>Beenden</button>
+        <form data-host-only method="post" action="{{ url_for('neues_spiel') }}" {% if not game_state.isHost %}hidden{% endif %}>
+          <button type="submit" class="secondary-btn" {% if not game_state.isHost %}disabled{% endif %}>Neue Runde</button>
         </form>
       </div>
     </header>
@@ -147,10 +147,10 @@
       <h2 id="winnerTitle">Gewinner</h2>
       <p id="winnerCopy" class="modal-intro"></p>
       <div class="modal-actions modal-actions-stack">
-        <form method="post" action="{{ url_for('neues_spiel') }}">
-          <button type="submit" class="primary-btn">Neue Runde starten</button>
+        <form data-host-only method="post" action="{{ url_for('neues_spiel') }}" {% if not game_state.isHost %}hidden{% endif %}>
+          <button type="submit" class="primary-btn" {% if not game_state.isHost %}disabled{% endif %}>Neue Runde starten</button>
         </form>
-        <button type="button" class="secondary-btn" onclick="openSaveModal()">Spielstand speichern</button>
+        <button data-host-only type="button" class="secondary-btn" onclick="openSaveModal()" {% if not game_state.isHost %}hidden disabled{% endif %}>Spielstand speichern</button>
         <button type="button" class="secondary-btn" onclick="closeWinnerModal()">Ansicht schliessen</button>
       </div>
     </div>

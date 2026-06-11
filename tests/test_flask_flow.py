@@ -17,6 +17,7 @@ class FlaskGameFlowTests(unittest.TestCase):
 
         cls.game_module = importlib.import_module("game")
         cls.database_module = importlib.import_module("engine.database")
+        cls.models_module = importlib.import_module("engine.models")
         cls.game_module.app.config.update(TESTING=True)
 
     @classmethod
@@ -27,6 +28,21 @@ class FlaskGameFlowTests(unittest.TestCase):
         cls.temp_dir.cleanup()
 
     def setUp(self):
+        with self.game_module.app.app_context():
+            for model in (
+                self.models_module.Player,
+                self.models_module.Field,
+                self.models_module.GameEvent,
+                self.models_module.GameStateSnapshot,
+                self.models_module.Card,
+                self.models_module.Setting,
+                self.models_module.GameSave,
+            ):
+                self.database_module.db.session.query(model).delete()
+            self.database_module.db.session.commit()
+        self.game_module.lobby_state.clear()
+        self.game_module.lobby_state.update(self.game_module.default_lobby_state(self.game_module.ROOM_ID))
+        self.game_module.board_store.reset_owners()
         self.client = self.game_module.app.test_client()
 
     def test_required_database_tables_exist(self):
@@ -96,6 +112,8 @@ class FlaskGameFlowTests(unittest.TestCase):
         duplicated = self.client.post(f"/api/save/{save_id}/duplicate", json={"name": "Finale Runde Kopie"}).get_json()
         self.assertTrue(duplicated["ok"])
         duplicate_id = duplicated["save"]["id"]
+        self.assertNotEqual(duplicated["save"]["game_id"], renamed["save"]["game_id"])
+        self.assertNotEqual(duplicated["save"]["join_code"], renamed["save"]["join_code"])
 
         deleted = self.client.post(f"/api/save/{duplicate_id}/delete").get_json()
         self.assertTrue(deleted["ok"])
@@ -202,6 +220,11 @@ class FlaskGameFlowTests(unittest.TestCase):
         saved = host_client.post("/api/save-current", json={"name": "Rejoin Altspiel"}).get_json()
         self.assertTrue(saved["ok"])
         save_id = saved["save"]["id"]
+        self.assertEqual(saved["save"]["host_id"], host_join["player_id"])
+        self.assertTrue(saved["save"]["join_code"])
+        guest_save_attempt = guest_client.post("/api/save-current", json={"name": "Gast darf nicht speichern"})
+        self.assertEqual(guest_save_attempt.status_code, 403)
+        self.assertFalse(guest_save_attempt.get_json()["ok"])
 
         response = host_client.post("/", data={"anzahl": "2"})
         self.assertEqual(response.status_code, 302)
@@ -209,19 +232,25 @@ class FlaskGameFlowTests(unittest.TestCase):
         response = host_client.post("/namen", data={"spieler1": "Neu A", "spieler2": "Neu B"})
         self.assertEqual(response.status_code, 302)
 
-        loaded = guest_client.post(f"/api/save/{save_id}/load").get_json()
+        denied_load = guest_client.post(f"/api/save/{save_id}/load")
+        self.assertEqual(denied_load.status_code, 403)
+        self.assertFalse(denied_load.get_json()["ok"])
+
+        loaded = host_client.post(f"/api/save/{save_id}/load").get_json()
         self.assertTrue(loaded["ok"])
-        self.assertEqual(loaded["redirect_url"], "/rejoin")
-        self.assertEqual(guest_client.get("/board").status_code, 302)
+        self.assertEqual(loaded["redirect_url"], "/board")
 
-        rejoined = guest_client.post("/rejoin", data={"player_id": guest_join["player_id"]})
-        self.assertEqual(rejoined.status_code, 302)
-        self.assertIn("/board", rejoined.headers["Location"])
+        returning_guest = self.game_module.app.test_client()
+        rejoined = returning_guest.post("/lobby/join", data={"name": "Lukas", "join_code": saved["save"]["join_code"]}).get_json()
+        self.assertTrue(rejoined["ok"])
+        self.assertTrue(rejoined["game_started"])
+        self.assertEqual(rejoined["player_id"], guest_join["player_id"])
 
-        state = guest_client.get("/api/state").get_json()["state"]
+        state = returning_guest.get("/api/state").get_json()["state"]
         self.assertEqual(state["activePlayerName"], "Lukas")
         self.assertTrue(state["canAct"])
-        self.assertTrue(guest_client.post("/zug_wuerfeln").get_json()["ok"])
+        self.assertFalse(state["isHost"])
+        self.assertTrue(returning_guest.post("/zug_wuerfeln").get_json()["ok"])
 
     def test_invalid_save_state_is_rejected_before_commit(self):
         with self.game_module.app.app_context():
