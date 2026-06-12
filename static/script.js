@@ -14,7 +14,6 @@ let selectedFieldId = null;
 let busy = false;
 let toastTimer = null;
 let diceTimer = null;
-let pollTimer = null;
 let lastSignature = "";
 let previousPositions = [...(state.positionen || [])];
 let eventSearchTerm = "";
@@ -29,6 +28,8 @@ let userSettings = {
 };
 let audio = null;
 let lastAudioEventId = state.lastEventEntry?.id || null;
+let socket = null;
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -439,6 +440,9 @@ function setState(nextState, options = {}) {
 
 function setBusy(nextBusy) {
   busy = nextBusy;
+  refs.commandActions?.querySelectorAll(".primary-btn").forEach((b) => {
+    b.classList.toggle("loading", nextBusy);
+  });
   renderActionPanel();
 }
 
@@ -474,7 +478,9 @@ function renderWinnerModal() {
 }
 
 async function postJson(url, payload = null) {
-  const options = { method: "POST", headers: { "Content-Type": "application/json" } };
+  const headers = { "Content-Type": "application/json" };
+  if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  const options = { method: "POST", headers };
   if (payload) options.body = JSON.stringify(payload);
   debugLog("board", "api.post", { url, hasPayload: Boolean(payload) });
   const response = await fetch(url, options);
@@ -842,6 +848,57 @@ function bindEvents() {
   });
 }
 
+function initSocket() {
+  if (typeof io === "undefined") {
+    pollTimer = window.setInterval(() => refreshState(), 1000);
+    return;
+  }
+  const dotEl = document.getElementById("connectionDot");
+  socket = io({ transports: ["websocket", "polling"] });
+
+  socket.on("connect", () => {
+    dotEl?.classList.add("connected");
+    const playerId = state.canonicalState?.players?.[state.aktiver]?.id;
+    if (playerId) socket.emit("client_identify", { player_id: playerId });
+    setInterval(() => socket.emit("ping"), 15000);
+  });
+
+  socket.on("disconnect", () => {
+    dotEl?.classList.remove("connected");
+  });
+
+  socket.on("game_state_update", (data) => {
+    if (busy) return;
+    const sig = getStateSignature(data.state);
+    if (sig !== lastSignature) {
+      const previousPhase = state.phase;
+      const previousRoll = state.displayRoll;
+      setState(data.state);
+      lastSignature = sig;
+      if (data.state.phase === "move" && previousPhase !== "move" && data.state.displayRoll && JSON.stringify(previousRoll) !== JSON.stringify(data.state.displayRoll)) {
+        animateDice(data.state.displayRoll);
+      }
+    }
+  });
+
+  socket.on("settings_update", (data) => {
+    applyUserSettings(data.settings);
+  });
+
+  socket.on("host_migrated", (data) => {
+    const myPlayerId = state.canonicalState?.players?.find((p) => p.id === state.canonicalState?.identity?.host_id)?.id;
+    if (data.new_host_id === myPlayerId) {
+      showToast("Du bist jetzt der Host.");
+    }
+    refreshState({ silent: true });
+  });
+
+  socket.on("lobby_closed", (data) => {
+    showToast(data.reason || "Host hat die Verbindung getrennt.");
+    window.setTimeout(() => { window.location.href = "/"; }, 2500);
+  });
+}
+
 function bootBoard() {
   cacheRefs();
   audio = new AudioManager(userSettings);
@@ -849,7 +906,8 @@ function bootBoard() {
   bindEvents();
   renderApp();
   lastSignature = getStateSignature(state);
-  pollTimer = window.setInterval(() => refreshState(), 1000);
+  refreshState({ silent: true });
+  initSocket();
   if (state.phase === "field_action" && state.popupFeld) {
     selectedFieldId = state.popupFeld.feld_id;
     renderModal();
@@ -861,7 +919,7 @@ function bootBoard() {
 document.addEventListener("DOMContentLoaded", bootBoard);
 window.addEventListener("pagehide", () => {
   audio?.stopMusic();
-  window.clearInterval(pollTimer);
+  socket?.disconnect();
   window.clearInterval(diceTimer);
   window.clearTimeout(toastTimer);
 });

@@ -19,7 +19,10 @@ class AudioManager {
       this.master.gain.value = this.masterVolume();
     }
     if (this.music) {
-      this.music.gain.gain.value = this.musicVolume() * 0.22;
+      this.music.gain.gain.value = Math.max(0.0001, this.musicVolume() * 0.12);
+    }
+    if (this._audioEl) {
+      this._audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
     }
     if (this.started && !this.music && this.masterVolume() && this.musicVolume()) {
       this.startMusic();
@@ -84,28 +87,110 @@ class AudioManager {
     }
   }
 
-  startMusic() {
+  async startMusic() {
     if (!this.masterVolume() || !this.musicVolume() || this.music) return;
     try {
       const context = this.ensureContext();
       const gain = context.createGain();
-      gain.gain.value = this.musicVolume() * 0.22;
+      gain.gain.value = Math.max(0.0001, this.musicVolume() * 0.12);
       gain.connect(this.master);
-      const bass = this.createLoopOscillator(context, "sine", 110, gain);
-      const pad = this.createLoopOscillator(context, "triangle", 220, gain);
-      bass.start();
-      pad.start();
-      this.music = { gain, oscillators: [bass, pad] };
+
+      let tracks = [];
+      try {
+        const resp = await fetch('/api/music/playlist');
+        if (resp.ok) {
+          const data = await resp.json();
+          tracks = data.tracks || [];
+        }
+      } catch (e) {
+        tracks = [];
+      }
+
+      if (!tracks.length) {
+        this._startAmbientFallback(context, gain);
+        return;
+      }
+
+      this._playlist = [...tracks].sort(() => Math.random() - 0.5);
+      this._trackIndex = 0;
+      this._musicContext = context;
+      this._musicGain = gain;
+      this.music = { gain, playlist: this._playlist };
+      this._playNextTrack();
     } catch (error) {
       return;
     }
   }
 
+  _playNextTrack() {
+    if (!this._playlist || !this._playlist.length) return;
+    try {
+      if (this._audioEl) {
+        try { this._audioEl.pause(); } catch (e) {}
+        try { this._audioElSource?.disconnect(); } catch (e) {}
+        this._audioEl = null;
+      }
+      const url = this._playlist[this._trackIndex];
+      const audioEl = new Audio(url);
+      audioEl.crossOrigin = 'anonymous';
+      audioEl.preload = 'auto';
+
+      const context = this._musicContext;
+      const gain = this._musicGain;
+      if (context && gain) {
+        try {
+          const src = context.createMediaElementSource(audioEl);
+          src.connect(gain);
+          this._audioElSource = src;
+        } catch (e) {
+          audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
+        }
+      } else {
+        audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
+      }
+
+      audioEl.addEventListener('ended', () => {
+        if (!this.music) return;
+        this._trackIndex = (this._trackIndex + 1) % this._playlist.length;
+        this._playNextTrack();
+      });
+
+      const play = async () => {
+        try {
+          if (context && context.state === 'suspended') await context.resume();
+          await audioEl.play();
+        } catch (e) {
+          // autoplay policy - will retry on next user interaction
+        }
+      };
+      play();
+      this._audioEl = audioEl;
+      if (this.music) this.music.audioEl = audioEl;
+    } catch (e) {
+      this._startAmbientFallback(this._musicContext, this._musicGain);
+    }
+  }
+
   stopMusic() {
     if (!this.music) return;
-    this.music.oscillators.forEach((oscillator) => oscillator.stop());
-    this.music.gain.disconnect();
-    this.music = null;
+    try {
+      if (this._audioEl) {
+        try { this._audioEl.pause(); } catch (e) {}
+        try { this._audioElSource?.disconnect(); } catch (e) {}
+        this._audioEl = null;
+        this._audioElSource = null;
+      }
+      if (this.music.oscillators) {
+        this.music.oscillators.forEach((osc) => {
+          try { osc.stop(); } catch (e) {}
+        });
+      }
+      try { this.music.gain.disconnect(); } catch (e) {}
+    } finally {
+      this.music = null;
+      this._playlist = null;
+      this._trackIndex = 0;
+    }
   }
 
   createLoopOscillator(context, type, frequency, output) {
@@ -114,6 +199,32 @@ class AudioManager {
     oscillator.frequency.value = frequency;
     oscillator.connect(output);
     return oscillator;
+  }
+
+  _startAmbientFallback(context, gain) {
+    if (!context || !gain) return;
+    try {
+      const low = context.createOscillator();
+      low.type = 'sine';
+      low.frequency.value = 60;
+      const mid = context.createOscillator();
+      mid.type = 'triangle';
+      mid.frequency.value = 110;
+      const lp = context.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 800;
+      const padGain = context.createGain();
+      padGain.gain.value = 0.0015 * (this.musicVolume() || 1);
+      low.connect(lp);
+      mid.connect(lp);
+      lp.connect(padGain);
+      padGain.connect(gain);
+      low.start();
+      mid.start();
+      this.music = { gain, oscillators: [low, mid], fallback: true };
+    } catch (e) {
+      this.music = null;
+    }
   }
 
   eventSound(eventType) {

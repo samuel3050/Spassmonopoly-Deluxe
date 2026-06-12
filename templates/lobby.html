@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Spassmonopoly Deluxe - Lobby</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body class="page page-lobby bg-slate-50 text-slate-900 antialiased">
   <main class="lobby-room min-h-screen">
@@ -75,17 +77,23 @@
 
         <div class="action-stack">
           <form method="post" action="{{ url_for('lobby_continue') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
             <button id="continueBtn" type="submit" class="secondary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>Letzte Runde fortsetzen</button>
           </form>
           <form method="post" action="{{ url_for('lobby_new') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
             <button id="resetBtn" type="submit" class="secondary-btn full-width">Lobby zurücksetzen</button>
           </form>
-          <button id="refreshBtn" class="secondary-btn full-width" onclick="updateLobby()">Aktualisieren</button>
         </div>
 
         <div class="lobby-progress">
           <span id="progressLabel">0% bereit</span>
           <div class="progress-track"><span id="progressFill"></span></div>
+        </div>
+
+        <div class="lobby-conn">
+          <span id="connDot" class="conn-dot"></span>
+          <span id="connLabel">Verbinde…</span>
         </div>
       </aside>
     </section>
@@ -95,8 +103,17 @@
   <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script>
     let currentPlayerId = {{ current_player_id|tojson }};
-    let autoRefreshInterval = null;
-    const audio = new AudioManager({});
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    const appSettings = {{ settings|tojson }};
+    const audio = new AudioManager(appSettings);
+
+    /* Honor the global theme so every page (Start, Lobby, Brett) matches. */
+    function applyTheme(settings) {
+      const theme = (settings && settings.theme) || "light";
+      document.body.classList.toggle("theme-light", theme === "light");
+      document.body.classList.toggle("theme-dark", theme !== "light");
+    }
+    applyTheme(appSettings);
     const minPlayers = {{ min_players }};
     const maxPlayers = {{ max_players }};
     const palette = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
@@ -125,6 +142,43 @@
       return "";
     }
 
+    /* ── Socket.IO live updates (polling fallback if socket is down) ── */
+    let socketConnected = false;
+    const socket = io({ transports: ["polling", "websocket"] });
+
+    socket.on("connect", () => {
+      socketConnected = true;
+      setConn(true);
+      if (currentPlayerId) socket.emit("client_identify", { player_id: currentPlayerId });
+      updateLobby();
+    });
+    socket.on("disconnect", () => { socketConnected = false; setConn(false); });
+    socket.io?.on?.("reconnect_attempt", () => setConn(false));
+    socket.on("lobby_update", renderLobby);
+    socket.on("game_started", (data) => {
+      showStatus("Spiel wird geöffnet.", "success");
+      window.setTimeout(() => { window.location.href = data.redirect_url || "/board"; }, 350);
+    });
+    socket.on("host_migrated", (data) => {
+      if (data.new_host_id === currentPlayerId) showStatus("Du bist jetzt der Host.", "success");
+    });
+    socket.on("lobby_closed", (data) => {
+      showStatus(data.reason || "Lobby geschlossen.", "warning");
+      window.setTimeout(() => { window.location.href = "/"; }, 2500);
+    });
+    socket.on("settings_update", (data) => { audio?.setSettings?.(data.settings); applyTheme(data.settings); });
+    window.setInterval(() => socket.emit("ping"), 15000);
+
+    // Safety net: while the realtime socket is not connected, poll so the lobby
+    // always reflects other players. When the socket is live, this stays quiet.
+    window.setInterval(() => { if (!socketConnected) updateLobby(); }, 2500);
+
+    function setConn(ok) {
+      document.getElementById("connDot")?.classList.toggle("on", ok);
+      const lbl = document.getElementById("connLabel");
+      if (lbl) lbl.textContent = ok ? "Verbunden" : "Verbinde…";
+    }
+
     async function joinGame(event) {
       event.preventDefault();
       const input = document.getElementById("playerName");
@@ -137,29 +191,29 @@
       }
 
       try {
-        debugLog("lobby", "join.start", { name, hasCode: Boolean(code) });
+        debugLog?.("lobby", "join.start", { name, hasCode: Boolean(code) });
         const response = await fetch("/lobby/join", {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrfToken },
           body: `name=${encodeURIComponent(name)}&join_code=${encodeURIComponent(code)}`,
         });
         const data = await response.json();
-        debugLog("lobby", "join.response", { status: response.status, ok: data.ok, gameStarted: data.game_started });
+        debugLog?.("lobby", "join.response", { status: response.status, ok: data.ok });
         if (!response.ok || !data.ok) {
           showStatus(data.msg || "Beitritt fehlgeschlagen.", "warning");
           return;
         }
         currentPlayerId = data.player_id;
+        socket.emit("client_identify", { player_id: currentPlayerId });
         if (data.game_started) {
           window.location.href = data.redirect_url || "/board";
           return;
         }
         document.getElementById("joinForm").classList.add("joined");
         showStatus(`Willkommen ${name}. Jetzt noch bereit setzen.`, "success");
-        await updateLobby();
-        startAutoRefresh();
+        await updateLobby();   // render myself immediately, don't wait for socket
       } catch (error) {
-        debugLog("lobby", "join.error", { message: error.message });
+        debugLog?.("lobby", "join.error", { message: error.message });
         showStatus("Verbindungsfehler beim Beitreten.", "warning");
       }
     }
@@ -192,52 +246,63 @@
       document.getElementById("readyChip").textContent = `${ready}/${players.length} bereit`;
     }
 
+    function renderLobby(data) {
+      if (!data || !Array.isArray(data.players)) return;
+      debugLog?.("lobby", "state.render", { players: data.players.length, hostId: data.host_id });
+
+      const playersList = document.getElementById("playersList");
+      document.getElementById("playerCount").textContent = data.players.length;
+      document.getElementById("joinCode").textContent = data.join_code || "------";
+
+      // Only jump into a running game if I am actually one of its players.
+      const iAmInGame = !!currentPlayerId && data.players.some((p) => p.id === currentPlayerId);
+      if (data.game_started && iAmInGame) {
+        window.location.href = data.redirect_url || "/board";
+        return;
+      }
+
+      if (!data.players.length) {
+        playersList.innerHTML = `
+          <div class="empty-product-state">
+            <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+            <strong>Noch niemand in der Lobby</strong>
+            <p class="empty-note">Der erste Spieler wird automatisch Host.</p>
+          </div>
+        `;
+      } else {
+        playersList.innerHTML = data.players.map(playerCard).join("");
+      }
+
+      renderProgress(data.players);
+      const startBtn = document.getElementById("startBtn");
+      const startHint = document.getElementById("startHint");
+      const continueBtn = document.getElementById("continueBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const isHost = currentPlayerId && data.host_id === currentPlayerId;
+      const hasEnough = data.players.length >= minPlayers;
+      startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
+      startBtn.textContent = data.game_started ? "Spiel läuft" : "Spiel starten";
+      if (!currentPlayerId) startHint.textContent = "Bitte erst beitreten.";
+      else if (!isHost) startHint.textContent = "Nur der Host kann die Runde starten.";
+      else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
+      else if (!data.all_ready) startHint.textContent = "Alle Spieler müssen bereit sein.";
+      else startHint.textContent = "Alles bereit. Die Runde kann starten.";
+      if (continueBtn) {
+        continueBtn.hidden = !isHost;
+        continueBtn.disabled = !isHost || !data.has_saved_game;
+      }
+      if (resetBtn) {
+        resetBtn.hidden = Boolean(data.players.length) && !isHost;
+        resetBtn.disabled = Boolean(data.players.length) && !isHost;
+      }
+    }
+
     async function updateLobby() {
       try {
         const response = await fetch("/lobby/state");
         const data = await response.json();
-        debugLog("lobby", "state.response", { status: response.status, players: data.players?.length, hostId: data.host_id });
         if (!response.ok || !data.ok) throw new Error(data.msg || "Lobby konnte nicht geladen werden.");
-
-        const playersList = document.getElementById("playersList");
-        document.getElementById("playerCount").textContent = data.players.length;
-        document.getElementById("joinCode").textContent = data.join_code || "------";
-
-        if (data.game_started && currentPlayerId) {
-          window.location.href = data.redirect_url || "/board";
-          return;
-        }
-
-        if (!data.players.length) {
-          playersList.innerHTML = `
-            <div class="empty-product-state">
-              <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
-              <strong>Noch niemand in der Lobby</strong>
-              <p class="empty-note">Der erste Spieler wird automatisch Host.</p>
-            </div>
-          `;
-        } else {
-          playersList.innerHTML = data.players.map(playerCard).join("");
-        }
-
-        renderProgress(data.players);
-        const startBtn = document.getElementById("startBtn");
-        const startHint = document.getElementById("startHint");
-        const continueBtn = document.getElementById("continueBtn");
-        const resetBtn = document.getElementById("resetBtn");
-        const isHost = currentPlayerId && data.host_id === currentPlayerId;
-        const hasEnough = data.players.length >= minPlayers;
-        startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
-        startBtn.textContent = data.game_started ? "Spiel läuft" : "Spiel starten";
-        if (!currentPlayerId) startHint.textContent = "Bitte erst beitreten.";
-        else if (!isHost) startHint.textContent = "Nur der Host kann die Runde starten.";
-        else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
-        else if (!data.all_ready) startHint.textContent = "Alle Spieler müssen bereit sein.";
-        else startHint.textContent = "Alles bereit. Die Runde kann starten.";
-        continueBtn.hidden = !isHost;
-        continueBtn.disabled = !isHost || !data.has_saved_game;
-        resetBtn.hidden = Boolean(data.players.length) && !isHost;
-        resetBtn.disabled = Boolean(data.players.length) && !isHost;
+        renderLobby(data);
       } catch (error) {
         showStatus(error.message || "Lobby-Update fehlgeschlagen.", "warning");
       }
@@ -249,13 +314,13 @@
         return;
       }
       try {
-        const response = await fetch("/lobby/ready", { method: "POST" });
+        const response = await fetch("/lobby/ready", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
         const data = await response.json();
         if (!response.ok || !data.ok) {
           showStatus(data.msg || "Status konnte nicht geändert werden.", "warning");
-          return;
+        } else {
+          await updateLobby();   // reflect my own ready state immediately
         }
-        await updateLobby();
       } catch (error) {
         showStatus("Bereit-Status konnte nicht geändert werden.", "warning");
       }
@@ -266,10 +331,9 @@
       startBtn.disabled = true;
       startBtn.textContent = "Startet...";
       try {
-        debugLog("lobby", "start.request", {});
-        const response = await fetch("/lobby/start", { method: "POST" });
+        debugLog?.("lobby", "start.request", {});
+        const response = await fetch("/lobby/start", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
         const data = await response.json();
-        debugLog("lobby", "start.response", { status: response.status, ok: data.ok });
         if (!response.ok || !data.ok) {
           showStatus(data.msg || "Start fehlgeschlagen.", "warning");
           await updateLobby();
@@ -285,13 +349,9 @@
       }
     }
 
-    function startAutoRefresh() {
-      if (autoRefreshInterval) window.clearInterval(autoRefreshInterval);
-      autoRefreshInterval = window.setInterval(updateLobby, 1200);
-    }
-
+    // Initial load (one request). Live updates afterwards come via Socket.IO.
     updateLobby();
-    startAutoRefresh();
+
     document.addEventListener("pointerdown", () => {
       audio.unlock();
       audio.startMusic();

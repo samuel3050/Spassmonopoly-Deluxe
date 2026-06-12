@@ -19,6 +19,7 @@
       {% endif %}
 
       <form method="post" class="players-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <div class="rejoin-list">
           {% for player in game_state.players %}
           <label class="rejoin-option">

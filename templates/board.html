@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body class="page page-board theme-light bg-slate-50 text-slate-900 antialiased">
   <main class="game-shell game-shell-studio min-h-screen">
@@ -13,7 +15,7 @@
       <div class="dock-brand">
         <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
         <div>
-          <div class="hero-badge">Live-Runde</div>
+          <div class="hero-badge"><span class="icon icon-live" aria-hidden="true">🎲</span>Live-Runde</div>
           <h1>Spassmonopoly Deluxe</h1>
         </div>
       </div>
@@ -27,6 +29,7 @@
         <button id="saveGameButton" data-host-only type="button" class="secondary-btn" {% if not game_state.isHost %}hidden disabled{% endif %}>Speichern</button>
         <button id="exitGameButton" data-host-only type="button" class="secondary-btn" {% if not game_state.isHost %}hidden disabled{% endif %}>Beenden</button>
         <form data-host-only method="post" action="{{ url_for('neues_spiel') }}" {% if not game_state.isHost %}hidden{% endif %}>
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
           <button type="submit" class="secondary-btn" {% if not game_state.isHost %}disabled{% endif %}>Neue Runde</button>
         </form>
       </div>
@@ -67,7 +70,7 @@
         <div class="board-stage board-stage-studio">
           <div class="board-toolbar board-toolbar-studio">
             <div>
-              <span class="panel-kicker">Spielfeld</span>
+              <span class="panel-kicker"><span class="icon icon-board" aria-hidden="true">🧩</span>Spielfeld</span>
               <strong id="centerTitle">Bereit</strong>
             </div>
             <div class="toolbar-actions">
@@ -134,11 +137,13 @@
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="connectionDot" class="connection-dot" title="Verbindungsstatus"></div>
 
   <div id="fieldModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card">
       <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeFieldModal()">x</button>
       <div id="fieldModalContent"></div>
+      <div class="modal-card-foil"></div>
     </div>
   </div>
 
@@ -149,6 +154,7 @@
       <p id="winnerCopy" class="modal-intro"></p>
       <div class="modal-actions modal-actions-stack">
         <form data-host-only method="post" action="{{ url_for('neues_spiel') }}" {% if not game_state.isHost %}hidden{% endif %}>
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
           <button type="submit" class="primary-btn" {% if not game_state.isHost %}disabled{% endif %}>Neue Runde starten</button>
         </form>
         <button data-host-only type="button" class="secondary-btn" onclick="openSaveModal()" {% if not game_state.isHost %}hidden disabled{% endif %}>Spielstand speichern</button>
@@ -174,7 +180,7 @@
   <div id="saveModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card modal-card-compact">
       <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeSaveModal()">x</button>
-      <div class="hero-badge">Spielstand</div>
+      <div class="hero-badge"><span class="icon icon-save" aria-hidden="true">💾</span>Spielstand</div>
       <h2>Spielstand benennen</h2>
       <p class="modal-intro">Vergib einen Namen, der später im Save Manager wiedererkennbar ist.</p>
       <label class="field-label" for="manualSaveName">Name</label>

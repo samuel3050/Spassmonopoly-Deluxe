@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -39,6 +40,7 @@
 
         <div class="action-stack">
           <form method="post" action="{{ url_for('continue_game') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
             <button type="submit" class="primary-btn launch-action" {% if not has_saved_game %}disabled{% endif %}>
               Letzte Runde fortsetzen
             </button>
@@ -47,6 +49,7 @@
         </div>
 
         <form method="post" class="new-game-panel">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
           <label class="field-label" for="anzahl">Lokale Spieler</label>
           <div class="number-row">
             <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
@@ -249,7 +252,8 @@
     }
 
     async function apiPost(url, payload = null) {
-      const options = { method: "POST", headers: { "Content-Type": "application/json" } };
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const options = { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken } };
       if (payload) options.body = JSON.stringify(payload);
       debugLog("home", "api.post", { url, hasPayload: Boolean(payload) });
       const response = await fetch(url, options);

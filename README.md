@@ -159,3 +159,17 @@ Beiträge sind willkommen. Bitte halte Änderungen fokussiert, dokumentiere neue
 Konfigurationen in dieser README und teste den betroffenen Spielablauf manuell.
 Eine Lizenzdatei sollte vor einer breiten Veröffentlichung noch bewusst
 festgelegt werden.
+
+## Musik / Hintergrund-Audio
+
+Das Projekt liefert keinen urheberrechtlich geschützten Monopoly-Soundtrack.
+Stattdessen sucht die App standardmäßig nach einer Datei unter
+`static/music/monopoly_theme.mp3` und spielt diese als Schleife ab, falls sie
+vorhanden ist. Falls keine Datei gefunden wird, verwendet die Oberfläche einen
+leisen Ambient-Fallback, der kein lautes Rauschen erzeugt.
+
+Wenn du ein eigenes Titelstück nutzen möchtest, lege eine geeignete MP3-Datei
+mit dem Namen `monopoly_theme.mp3` in den Ordner `static/music/`.
+
+Hinweis: Bitte achte auf die Lizenz des Audios — verwende entweder eigene
+Aufnahmen, lizenzfreie Musik oder Musik, für die du die Nutzungserlaubnis hast.

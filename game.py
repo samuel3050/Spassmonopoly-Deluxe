@@ -5,7 +5,9 @@ import logging
 import random
 import re
 import string
+import threading
 import time
+from secrets import token_hex
 from threading import RLock
 from uuid import uuid4
 
@@ -23,6 +25,13 @@ except ImportError as exc:
         "Flask ist nicht installiert. Bitte führe `pip install -r requirements.txt` im Ordner "
         "`Spassmonopoly-Deluxe` aus."
     ) from exc
+
+try:
+    from flask_socketio import SocketIO, emit, join_room
+except ImportError:
+    SocketIO = None
+    emit = None
+    join_room = None
 
 from engine.board_store import BoardStore
 from engine.database import create_tables, init_db
@@ -64,6 +73,19 @@ logging.basicConfig(
 )
 app.logger.setLevel(LOG_LEVEL)
 
+if SocketIO is not None:
+    # "threading" mode is the most reliable for a local game: it works with the
+    # plain Werkzeug server without eventlet monkey-patching (which is fragile on
+    # Windows and was leaving the client stuck on "connecting"). Socket.IO falls
+    # back to HTTP long-polling, which is plenty fast for a lobby.
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+else:
+    socketio = None
+
+SOCKET_ROOM = f"game:{ROOM_ID}"
+
+connected_clients: dict = {}
+
 init_db(app)
 create_tables(app)
 
@@ -78,6 +100,20 @@ lobby_state = {
     "room_id": ROOM_ID,
 }
 state_lock = RLock()
+
+
+def _emit(event, data, room=None, to=None):
+    if socketio is None:
+        return
+    try:
+        if to:
+            socketio.emit(event, data, to=to)
+        elif room:
+            socketio.emit(event, data, room=room)
+        else:
+            socketio.emit(event, data)
+    except Exception:
+        pass
 
 
 def structured_log(level, event, **fields):
@@ -131,6 +167,26 @@ def log_request_debug_context(response):
             save_id=(request.view_args or {}).get("save_id"),
         )
     return response
+
+
+@app.before_request
+def check_csrf():
+    if request.method == "POST" and not (request.path or "").startswith("/socket.io"):
+        token = (
+            request.headers.get("X-CSRF-Token")
+            or (request.get_json(silent=True) or {}).get("_csrf")
+            or request.form.get("_csrf")
+        )
+        expected = session.get("csrf_token")
+        if expected and token != expected:
+            return jsonify({"ok": False, "msg": "CSRF-Schutz: Ungültiger Token."}), 403
+
+
+@app.context_processor
+def inject_csrf():
+    if "csrf_token" not in session:
+        session["csrf_token"] = token_hex(32)
+    return {"csrf_token": session["csrf_token"]}
 
 
 def make_join_code():
@@ -332,9 +388,6 @@ def load_game_state(room_id=ROOM_ID):
     state = normalize_game_state(read_game_state(room_id), room_id)
     if state is None:
         return None
-
-    lobby_state.clear()
-    lobby_state.update(infer_lobby_state(state, room_id))
     return state
 
 
@@ -588,8 +641,206 @@ def render_board():
         )
 
 
+def _build_lobby_payload():
+    with state_lock:
+        players_snap = dict(lobby_state.get("players", {}))
+        host_id = lobby_state.get("host_id")
+        join_code = lobby_state.get("join_code")
+        game_started = bool(lobby_state.get("game_started"))
+    players = [
+        {
+            "id": pid,
+            "name": p["name"],
+            "ready": bool(p.get("ready")),
+            "host": pid == host_id,
+            "order": idx + 1,
+        }
+        for idx, (pid, p) in enumerate(players_snap.items())
+    ]
+    all_ready = bool(players) and all(p["ready"] for p in players)
+    with app.app_context():
+        saved = has_saved_game(ROOM_ID)
+    return {
+        "players": players,
+        "all_ready": all_ready,
+        "game_started": game_started,
+        "has_saved_game": saved,
+        "host_id": host_id,
+        "join_code": join_code,
+        "min_players": MIN_LOBBY_PLAYERS,
+        "max_players": MAX_LOBBY_PLAYERS,
+    }
+
+
+def broadcast_game_state(game_state):
+    if socketio is None:
+        return
+    try:
+        payload = build_game_payload(game_state, current_player_id=None)
+        _emit("game_state_update", {"state": payload}, room=SOCKET_ROOM)
+    except Exception:
+        pass
+
+
+# Players are not removed the instant a socket drops, because a normal page
+# refresh briefly disconnects and reconnects. Removal only happens after the
+# player has had no live socket for this many seconds (grace window).
+_LOBBY_PRESENCE_GRACE = 12
+_player_absent_since: dict[str, float] = {}
+# Players are only auto-removed if their realtime socket was confirmed at least
+# once. If sockets never work for a player, we never cull them — a broken socket
+# must never make a player vanish from the lobby.
+_seen_on_socket: set[str] = set()
+
+
+def _active_player_ids():
+    return {
+        c.get("player_id")
+        for c in list(connected_clients.values())
+        if c.get("player_id")
+    }
+
+
+def _reap_presence():
+    """Remove players who have been offline beyond the grace window.
+
+    During the lobby: drop the player, migrate host if needed.
+    During an active game: only the host going dark closes the game (autosave),
+    other players stay in the game state so they can rejoin.
+    """
+    now = time.time()
+    lobby_dirty = False
+    host_migrated_to = None
+    close_reason = None
+
+    with state_lock:
+        active = _active_player_ids()
+        players = lobby_state.get("players", {})
+        game_started = bool(lobby_state.get("game_started"))
+
+        for pid in list(players.keys()):
+            if pid in active:
+                _player_absent_since.pop(pid, None)
+                continue
+            if pid not in _seen_on_socket:
+                # Their socket never connected — sockets may be broken for them.
+                # Never cull such a player; only "Lobby zurücksetzen" clears them.
+                continue
+            since = _player_absent_since.setdefault(pid, now)
+            if now - since < _LOBBY_PRESENCE_GRACE:
+                continue
+            _player_absent_since.pop(pid, None)
+            is_host = (pid == lobby_state.get("host_id"))
+            if not game_started:
+                players.pop(pid, None)
+                lobby_dirty = True
+                if is_host:
+                    remaining = list(players.keys())
+                    lobby_state["host_id"] = remaining[0] if remaining else None
+                    if remaining:
+                        host_migrated_to = remaining[0]
+            elif is_host:
+                close_reason = "Host hat die Verbindung getrennt. Das Spiel wurde gespeichert."
+
+        # Forget absence timers for players no longer tracked.
+        for pid in list(_player_absent_since.keys()):
+            if pid not in players:
+                _player_absent_since.pop(pid, None)
+
+    if close_reason:
+        try:
+            with app.app_context():
+                save_current_state_with_event(close_reason)
+        except Exception:
+            pass
+        _emit("lobby_closed", {"reason": close_reason}, room=SOCKET_ROOM)
+        return
+    if host_migrated_to:
+        _emit("host_migrated", {"new_host_id": host_migrated_to}, room=SOCKET_ROOM)
+    if lobby_dirty or host_migrated_to:
+        _emit("lobby_update", _build_lobby_payload(), room=SOCKET_ROOM)
+
+
+def _presence_reaper():
+    while True:
+        time.sleep(4)
+        try:
+            _reap_presence()
+        except Exception:
+            pass
+
+
+threading.Thread(target=_presence_reaper, daemon=True).start()
+
+
 def rejoin_redirect_for_state(game_state):
     return url_for("rejoin_page") if game_requires_rejoin(game_state) else url_for("spiel")
+
+
+if socketio is not None:
+    @socketio.on("connect")
+    def handle_ws_connect():
+        sid = request.sid
+        player_id = session.get("player_id")
+        player_name = session.get("player_name")
+        connected_clients[sid] = {
+            "player_id": player_id,
+            "connected_at": time.time(),
+            "last_ping": time.time(),
+        }
+        join_room(SOCKET_ROOM)
+        if player_id:
+            _seen_on_socket.add(player_id)
+        # Resilience: if this session belongs to a known lobby player who was
+        # dropped by a transient disconnect (e.g. a page refresh), re-add them
+        # so a reload never kicks a player out of the lobby.
+        with state_lock:
+            game_started = bool(lobby_state.get("game_started"))
+            players = lobby_state.get("players", {})
+            if player_id and player_name and not game_started and player_id not in players:
+                players[player_id] = {
+                    "name": player_name,
+                    "ready": False,
+                    "session_id": session.get("session_id"),
+                }
+                if not lobby_state.get("host_id"):
+                    lobby_state["host_id"] = player_id
+                _emit("lobby_update", _build_lobby_payload(), room=SOCKET_ROOM)
+        emit("lobby_update", _build_lobby_payload())
+
+    @socketio.on("disconnect")
+    def handle_ws_disconnect():
+        # Only drop the socket. The presence reaper decides whether the player
+        # is actually gone (after a grace window), so a refresh never kicks them.
+        connected_clients.pop(request.sid, None)
+
+    @socketio.on("ping")
+    def handle_ws_ping():
+        sid = request.sid
+        if sid in connected_clients:
+            connected_clients[sid]["last_ping"] = time.time()
+        emit("pong")
+
+    @socketio.on("client_identify")
+    def handle_ws_identify(data):
+        sid = request.sid
+        player_id = data.get("player_id") or session.get("player_id")
+        if sid in connected_clients and player_id:
+            connected_clients[sid]["player_id"] = player_id
+            _seen_on_socket.add(player_id)
+
+
+@app.route("/api/music/playlist", methods=["GET"])
+def api_music_playlist():
+    music_dir = os.path.join(app.static_folder, "music")
+    if not os.path.isdir(music_dir):
+        return jsonify({"ok": True, "tracks": []})
+    tracks = [
+        f"/static/music/{filename}"
+        for filename in sorted(os.listdir(music_dir))
+        if filename.lower().endswith((".mp3", ".ogg", ".wav", ".m4a"))
+    ]
+    return jsonify({"ok": True, "tracks": tracks})
 
 
 @app.route("/api/saves", methods=["GET"])
@@ -680,6 +931,7 @@ def api_save_current():
             requested_name = payload.get("name")
             save_name = clean_save_name(requested_name) if requested_name else None
             game_state = save_current_state_with_event("Spielstand manuell gespeichert.")
+            broadcast_game_state(game_state)
             named_save = None
             if save_name:
                 existing = GameSaveService.load_save_by_name(save_name)
@@ -844,6 +1096,7 @@ def api_settings():
 
             payload = request.get_json(silent=True) or {}
             settings = GameSaveService.update_global_settings(payload)
+            _emit("settings_update", {"settings": settings}, room=SOCKET_ROOM)
             return jsonify({"ok": True, "message": "Einstellungen gespeichert.", "settings": settings})
     except ValueError as e:
         return json_error(str(e), 400)
@@ -914,13 +1167,13 @@ def lobby_page():
             join_code=lobby_state.get("join_code"),
             min_players=MIN_LOBBY_PLAYERS,
             max_players=MAX_LOBBY_PLAYERS,
+            settings=GameSaveService.get_global_settings(),
         )
 
 
 @app.route("/lobby/join", methods=["POST"])
 def lobby_join():
-    with state_lock, app.app_context():
-        load_game_state(ROOM_ID)
+    with state_lock:
         try:
             name = clean_lobby_name(request.form.get("name", ""))
         except ValueError as exc:
@@ -981,6 +1234,7 @@ def lobby_join():
         session["player_name"] = name
         session["room_id"] = ROOM_ID
 
+        _emit("lobby_update", _build_lobby_payload(), room=SOCKET_ROOM)
         return jsonify({"ok": True, "player_id": player_id, "game_started": False})
 
 
@@ -992,40 +1246,16 @@ def lobby_ready():
             return json_error("Nicht in der Lobby")
 
         lobby_state["players"][player_id]["ready"] = not lobby_state["players"][player_id].get("ready", False)
+    _emit("lobby_update", _build_lobby_payload(), room=SOCKET_ROOM)
     return jsonify({"ok": True})
 
 
 @app.route("/lobby/state", methods=["GET"])
 def lobby_state_api():
-    with state_lock, app.app_context():
-        current_game = load_game_state(ROOM_ID)
-        host_id = get_host_id(current_game)
-        players = [
-            {
-                "id": player_id,
-                "name": player["name"],
-                "ready": bool(player.get("ready")),
-                "host": player_id == host_id,
-                "order": index + 1,
-            }
-            for index, (player_id, player) in enumerate(lobby_state.get("players", {}).items())
-        ]
-        all_ready = bool(players) and all(player["ready"] for player in players)
-
-        return jsonify(
-            {
-                "ok": True,
-                "players": players,
-                "all_ready": all_ready,
-                "game_started": bool(lobby_state.get("game_started")),
-                "has_saved_game": has_saved_game(ROOM_ID),
-                "min_players": MIN_LOBBY_PLAYERS,
-                "max_players": MAX_LOBBY_PLAYERS,
-                "host_id": host_id,
-                "join_code": (current_game.get("identity") or {}).get("join_code") if current_game else lobby_state.get("join_code"),
-                "redirect_url": url_for("spiel"),
-            }
-        )
+    payload = _build_lobby_payload()
+    payload["redirect_url"] = url_for("spiel")
+    payload["ok"] = True
+    return jsonify(payload)
 
 
 @app.route("/lobby/start", methods=["POST"])
@@ -1047,6 +1277,7 @@ def lobby_start():
         player_ids = [player_id for player_id, _ in players]
         with app.app_context():
             create_new_game(ROOM_ID, names, player_ids=player_ids, mode="lobby")
+    _emit("game_started", {"redirect_url": url_for("spiel")}, room=SOCKET_ROOM)
     return jsonify({"ok": True, "redirect_url": url_for("spiel")})
 
 
@@ -1145,6 +1376,7 @@ def zug_wuerfeln():
                     }
                 ), 403
             game_state = persist_state(roll_dice(current_state))
+            broadcast_game_state(game_state)
         except ValueError as exc:
             current_state = persist_error_event(get_current_state(), str(exc))
             return jsonify(
@@ -1177,6 +1409,7 @@ def zug_ziehen():
                     }
                 ), 403
             game_state = persist_state(move_player(current_state))
+            broadcast_game_state(game_state)
         except ValueError as exc:
             current_state = persist_error_event(get_current_state(), str(exc))
             return jsonify(
@@ -1217,6 +1450,7 @@ def feld_aktion():
                     field_id=payload.get("feld"),
                 )
             )
+            broadcast_game_state(game_state)
         except ValueError as exc:
             current_state = persist_error_event(get_current_state(), str(exc))
             return jsonify(
@@ -1249,6 +1483,21 @@ def neues_spiel():
     return redirect(url_for("lobby_page" if return_to_lobby else "index"))
 
 
+with app.app_context():
+    try:
+        _initial_state = load_game_state(ROOM_ID)
+        if _initial_state:
+            lobby_state.update(infer_lobby_state(_initial_state, ROOM_ID))
+        else:
+            lobby_state.update(default_lobby_state(ROOM_ID))
+    except Exception:
+        lobby_state.update(default_lobby_state(ROOM_ID))
+
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes", "on"}
-    app.run(debug=debug)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "5000"))
+    if socketio is not None:
+        socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host=host, port=port, debug=debug)
