@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: spassmonopoly-deluxe
+    runtime: python
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT game:app
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DB_ENGINE
+        value: sqlite
+      - key: DB_FILE
+        value: spassmonopoly.db
+      - key: GAME_ROOM_ID
+        value: room_default
