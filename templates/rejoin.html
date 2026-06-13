@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spieler auswählen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="page page-setup bg-slate-50 text-slate-900 antialiased">
+  <main class="setup-shell min-h-screen">
+    <section class="setup-card bg-white shadow-xl ring-1 ring-slate-200">
+      <div class="hero-badge">Rejoin</div>
+      <h1>Spieler auswählen</h1>
+      <p class="hero-copy">Dieser Spielstand ist geladen. Wähle deinen gespeicherten Spieler, um mit der richtigen Session weiterzuspielen.</p>
+
+      {% if error %}
+      <p class="status-message warning">{{ error }}</p>
+      {% endif %}
+
+      <form method="post" class="players-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <div class="rejoin-list">
+          {% for player in game_state.players %}
+          <label class="rejoin-option">
+            <input type="radio" name="player_id" value="{{ player.id }}" required {% if loop.first %}checked{% endif %}>
+            <span>
+              <strong>{{ player.name }}</strong>
+              <small>Feld {{ player.position + 1 }} · {{ player.action_points }} Punkte</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenü</a>
+          <button type="submit" class="primary-btn">Weiter spielen</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

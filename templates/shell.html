@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spassmonopoly Deluxe</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+
+    .app-shell { position: fixed; inset: 0; }
+
+    .app-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    .start-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background:
+        radial-gradient(rgba(23, 32, 45, 0.05) 1.5px, transparent 1.5px) 0 0 / 24px 24px,
+        radial-gradient(rgba(23, 32, 45, 0.04) 1.5px, transparent 1.5px) 12px 12px / 24px 24px,
+        linear-gradient(120deg, rgba(37, 99, 235, 0.14), transparent 38%),
+        radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 34%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-0));
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .start-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .start-card {
+      width: min(94vw, 480px);
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+      text-align: center;
+      padding: clamp(28px, 5vw, 52px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(245, 247, 240, 0.98));
+      box-shadow: var(--shadow);
+    }
+
+    .start-card .brand-mark {
+      width: clamp(72px, 12vw, 96px);
+      height: clamp(72px, 12vw, 96px);
+      font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+    }
+
+    .start-card h1 {
+      margin: 4px 0 0;
+      font-size: clamp(2rem, 5vw, 3.1rem);
+    }
+
+    .start-sub {
+      margin: 0;
+      max-width: 36ch;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .start-features {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin: 2px 0 6px;
+    }
+
+    .start-btn {
+      min-width: 230px;
+      min-height: 58px;
+      font-size: 1.06rem;
+    }
+
+    .start-hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body class="theme-light">
+  <div class="app-shell">
+    <iframe id="appFrame" class="app-frame" src="{{ url_for('index') }}" title="Spassmonopoly Deluxe Spieloberfläche"></iframe>
+  </div>
+
+  <div id="startOverlay" class="start-overlay">
+    <div class="start-card">
+      <div class="brand-mark" aria-hidden="true">SD</div>
+      <div class="hero-badge">Deluxe Edition</div>
+      <h1>Spassmonopoly Deluxe</h1>
+      <p class="start-sub">Der digitale Spieltisch für lokale Runden und Online-Lobbys – würfeln, kaufen, kassieren.</p>
+      <div class="start-features">
+        <span class="feature-pill">2 – 8 Spieler</span>
+        <span class="feature-pill">Lokal &amp; Online</span>
+        <span class="feature-pill">Auto-Save</span>
+      </div>
+      <button id="startButton" type="button" class="primary-btn start-btn">Spiel starten</button>
+      <span class="start-hint">Klicken, um mit Hintergrundmusik zu starten</span>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
+  <script>
+    let shellSettings = {{ settings|tojson }};
+    const audio = new AudioManager(shellSettings);
+    const overlay = document.getElementById("startOverlay");
+
+    // The shell is a neutral frame; it always stays light so the start screen is
+    // readable regardless of the in-game theme (the game owns its own theme).
+
+    // Bind resume triggers on the persistent shell (it never reloads, so once the
+    // music is running here it keeps playing across every inner-page navigation).
+    audio.enableContinuousPlayback();
+
+    function startExperience() {
+      audio.unlock();
+      audio.setSettings(shellSettings);
+      audio.startMusic();
+      overlay.classList.add("hidden");
+    }
+
+    document.getElementById("startButton").addEventListener("click", startExperience);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) startExperience();
+    });
+
+    // Settings changed inside the iframe keep the persistent music in sync.
+    window.addEventListener("message", (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data || {};
+      if (data.type === "sm-settings" && data.settings) {
+        shellSettings = { ...shellSettings, ...data.settings };
+        audio.setSettings(shellSettings);
+      }
+    });
+  </script>
+</body>
+</html>

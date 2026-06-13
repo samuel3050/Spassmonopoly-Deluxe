@@ -9,17 +9,18 @@
 <body class="page page-setup">
   <main class="setup-shell">
     <section class="setup-card">
-      <div class="hero-badge">Lobby</div>
+      <div class="hero-badge">Setup</div>
       <h1>Spielrunde vorbereiten</h1>
       <p class="hero-copy">
-        Vergib für alle {{ anzahl }} Plätze einen Namen. Leere Felder werden automatisch mit
-        passenden Standardnamen ergänzt, damit ihr ohne Unterbrechung starten könnt.
+        Vergib für alle {{ anzahl }} Plätze einen Namen. Leere Felder werden automatisch ersetzt,
+        damit die Runde ohne Unterbrechung starten kann.
       </p>
 
       <form method="post" class="players-form">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         {% for i in range(1, anzahl + 1) %}
         <label class="field-label" for="spieler{{ i }}">Spieler {{ i }}</label>
-        <input id="spieler{{ i }}" type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required>
+        <input id="spieler{{ i }}" type="text" name="spieler{{ i }}" placeholder="Spieler {{ i }}" required maxlength="24">
         {% endfor %}
 
         <div class="form-actions">
@@ -29,5 +30,18 @@
       </form>
     </section>
   </main>
+
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
+  <script>
+    const audio = new AudioManager({{ settings|tojson }});
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
+    });
+    // Keep the background music looping continuously through setup.
+    audio.enableContinuousPlayback();
+  </script>
 </body>
 </html>

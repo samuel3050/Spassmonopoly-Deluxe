@@ -2,8 +2,8 @@ import os
 from contextlib import contextmanager
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 db = SQLAlchemy()
@@ -62,3 +62,55 @@ def create_tables(app):
     """Create all database tables."""
     with app.app_context():
         db.create_all()
+        Base.metadata.create_all(db.engine)
+        run_automatic_migrations()
+
+
+def run_automatic_migrations():
+    """Run small idempotent migrations without requiring an external migration tool."""
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+
+    with db.engine.begin() as connection:
+        if "cards" in tables:
+            card_columns = {column["name"] for column in inspector.get_columns("cards")}
+            if "pile" not in card_columns:
+                connection.execute(text("ALTER TABLE cards ADD COLUMN pile VARCHAR(40) NOT NULL DEFAULT 'deck'"))
+
+        if "game_state" in tables and "game_states" in tables:
+            target_count = connection.execute(text("SELECT COUNT(*) FROM game_states")).scalar() or 0
+            if not target_count:
+                source_columns = {column["name"] for column in inspector.get_columns("game_state")}
+                required_state = {"id", "game_save_id", "version", "state_json", "created_at"}
+                if required_state.issubset(source_columns):
+                    connection.execute(
+                        text(
+                            """
+                            INSERT INTO game_states (id, game_save_id, version, state_json, created_at)
+                            SELECT id, game_save_id, version, state_json, created_at
+                            FROM game_state
+                            """
+                        )
+                    )
+
+        if "game_saves" not in tables or "games" not in tables:
+            return
+
+        games_count = connection.execute(text("SELECT COUNT(*) FROM games")).scalar() or 0
+        if games_count:
+            return
+
+        legacy_columns = {column["name"] for column in inspector.get_columns("game_saves")}
+        required = {"id", "name", "description", "created_at", "updated_at", "version", "game_state_json"}
+        if not required.issubset(legacy_columns):
+            return
+
+        connection.execute(
+            text(
+                """
+                INSERT INTO games (id, name, description, created_at, updated_at, version, game_state_json)
+                SELECT id, name, description, created_at, updated_at, version, game_state_json
+                FROM game_saves
+                """
+            )
+        )

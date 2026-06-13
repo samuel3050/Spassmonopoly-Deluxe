@@ -3,55 +3,573 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spaßmonopoly Deluxe</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Spassmonopoly Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="page page-home">
-  <main class="hero-shell">
-    <section class="hero-card">
-      <div class="hero-badge">Gesellschaftsspiel im Browser</div>
-      <h1>Spaßmonopoly Deluxe</h1>
-      <p class="hero-copy">
-        Ein hochwertig inszeniertes Brettspiel-Erlebnis für gemeinsame Runden:
-        klarer Spielablauf, starkes Design und ein Spielfeld, das sofort Lust aufs Loslegen macht.
-      </p>
+<body class="page page-home theme-light bg-slate-50 text-slate-900 antialiased">
+  <main class="app-dashboard min-h-screen">
+    <header class="main-menu-header bg-white/90 shadow-sm ring-1 ring-slate-200">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">SD</div>
+        <div>
+          <div class="hero-badge">Deluxe Edition</div>
+          <h1>Spassmonopoly Deluxe</h1>
+          <p class="panel-copy">Ein schneller digitaler Spieltisch für lokale Runden, Lobbys und gespeicherte Sessions.</p>
+        </div>
+      </div>
 
-      <div class="start-menu">
-        <form method="post" action="{{ url_for('continue_game') }}">
-          <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
-            Continue Last Game
-          </button>
+      <nav class="menu-tabs" aria-label="Hauptnavigation">
+        <a class="menu-tab active" href="#play" data-home-tab="play">Spielen</a>
+        <a class="menu-tab" href="#saves" data-home-tab="saves">Saves</a>
+        <a class="menu-tab" href="#settings" data-home-tab="settings">Einstellungen</a>
+        <a class="menu-tab" href="#about" data-home-tab="about">Info</a>
+      </nav>
+    </header>
+
+    <section id="play" class="dashboard-grid home-view active" data-home-view="play">
+      <section class="menu-panel primary-menu-panel bg-white shadow-xl ring-1 ring-slate-200">
+        <div class="panel-heading">
+          <div>
+            <div class="hero-badge">Schnellstart</div>
+            <h2>Nächste Runde</h2>
+          </div>
+          <span class="status-chip status-chip-hot">{{ saves|length }} Saves</span>
+        </div>
+
+        <div class="action-stack">
+          <form method="post" action="{{ url_for('continue_game') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <button type="submit" class="primary-btn launch-action" {% if not has_saved_game %}disabled{% endif %}>
+              Letzte Runde fortsetzen
+            </button>
+          </form>
+          <a href="{{ url_for('lobby_page') }}" class="secondary-link launch-action">Online-Lobby öffnen</a>
+        </div>
+
+        <form method="post" class="new-game-panel">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <label class="field-label" for="anzahl">Lokale Spieler</label>
+          <div class="number-row">
+            <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
+            <button type="submit" class="secondary-btn">Lokales Spiel</button>
+          </div>
         </form>
+
+        <div class="feature-row compact-features">
+          <span class="feature-pill">2-8 Spieler</span>
+          <span class="feature-pill">Save Manager</span>
+          <span class="feature-pill">Responsive Board</span>
+        </div>
+      </section>
+
+      <section class="menu-panel menu-panel-stack bg-white/95 shadow-lg ring-1 ring-slate-200">
+        <div class="mini-stat-grid">
+          <article class="stat-card">
+            <span class="stat-label">Spielstände</span>
+            <strong class="stat-value">{{ saves|length }}</strong>
+            <span class="stat-meta">Verfügbar</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Status</span>
+            <strong class="stat-value">{% if has_saved_game %}Bereit{% else %}Neu{% endif %}</strong>
+            <span class="stat-meta">Fortsetzen</span>
+          </article>
+        </div>
+
+        <div class="release-notes">
+          <div class="hero-badge">Boardroom</div>
+          <h2>Klare Züge, klare Saves</h2>
+          <p class="panel-copy">Würfe, Bewegung, Karten, Besitz und Logs werden serverseitig gespeichert und beim Laden wiederhergestellt.</p>
+        </div>
+      </section>
+    </section>
+
+    <section id="saves" class="save-manager pro-save-manager home-view bg-white shadow-xl ring-1 ring-slate-200" data-home-view="saves" aria-labelledby="saveManagerTitle" hidden>
+      <div class="save-manager-heading">
+        <div>
+          <div class="hero-badge">Save Manager</div>
+          <h2 id="saveManagerTitle">Gespeicherte Spiele</h2>
+        </div>
+        <input id="saveSearch" class="save-search" type="search" placeholder="Nach Name oder Datum suchen" autocomplete="off">
       </div>
 
-      <form method="post" class="stack-form">
-        <div class="hero-badge">New Game</div>
-        <label class="field-label" for="anzahl">Wie viele Spielerinnen und Spieler sind dabei?</label>
-        <input id="anzahl" type="number" name="anzahl" min="2" max="8" value="4" required>
-        <button type="submit" class="secondary-btn">Start a New Game</button>
-      </form>
-
-      <div class="feature-row">
-        <div class="feature-pill">2 bis 8 Spieler</div>
-        <div class="feature-pill">Desktop und mobil spielbar</div>
-        <div class="feature-pill">Klares Zugsystem in Echtzeit</div>
+      <div id="saveEmptyState" class="empty-product-state {% if saves %}hidden{% endif %}">
+        <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+        <strong>Noch keine Spielstände</strong>
+        <p class="empty-note">Starte eine neue Runde oder öffne die Lobby. Danach kannst du sie im Spiel benannt speichern.</p>
       </div>
 
-      <section class="hero-highlights">
-        <article class="hero-highlight-card">
-          <strong>Einfacher Einstieg</strong>
-          <p>Namen eingeben, Runde eröffnen und sofort auf dem Spielfeld loslegen.</p>
+      <div id="saveList" class="save-list save-list-pro" {% if not saves %}hidden{% endif %}>
+        {% for save in saves %}
+        <article class="save-card save-card-pro bg-white shadow-md ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}" data-search="{{ (save.name ~ ' ' ~ save.created_at ~ ' ' ~ save.updated_at ~ ' ' ~ save.status)|lower }}">
+          <div class="save-title-block">
+            <strong>{{ save.name }}</strong>
+            <p>{{ save.player_count }} Spieler &middot; Runde {{ save.round }} &middot; {{ save.status }}</p>
+          </div>
+          <div class="save-meta save-meta-grid">
+            <span>Erstellt <strong>{{ save.created_at[:10] }}</strong></span>
+            <span>Geändert <strong>{{ save.updated_at[:10] }}</strong></span>
+            <span>Aktiv <strong>{{ save.active_player or "n/a" }}</strong></span>
+          </div>
+          <div class="save-actions">
+            <button type="button" class="primary-btn" data-save-action="load" data-save-id="{{ save.id }}">Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" data-save-action="rename" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" data-save-action="duplicate" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" data-save-action="delete" data-save-id="{{ save.id }}" data-save-name="{{ save.name }}">x</button>
+          </div>
         </article>
-        <article class="hero-highlight-card">
-          <strong>Professionelle UX</strong>
-          <p>Würfeln, bewegen und Feldaktion laufen sauber nacheinander und bleiben immer sichtbar.</p>
-        </article>
-        <article class="hero-highlight-card">
-          <strong>Motivierender Spielfluss</strong>
-          <p>Besitz, Ereignisse, Rundenstatus und Verlauf sind jederzeit klar und übersichtlich präsent.</p>
-        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="settings" class="dashboard-grid dashboard-grid-secondary home-view" data-home-view="settings" hidden>
+      <section class="menu-panel bg-white shadow-xl ring-1 ring-slate-200">
+        <div class="hero-badge">Einstellungen</div>
+        <h2>Spielgefuehl</h2>
+        <form id="settingsForm" class="settings-grid">
+          <label class="setting-row">
+            <span>Master Volume</span>
+            <input id="settingVolume" type="range" min="0" max="100" value="{{ settings.volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Music Volume</span>
+            <input id="settingMusicVolume" type="range" min="0" max="100" value="{{ settings.music_volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Effects Volume</span>
+            <input id="settingEffectsVolume" type="range" min="0" max="100" value="{{ settings.effects_volume }}">
+          </label>
+          <label class="setting-row">
+            <span>Mute</span>
+            <select id="settingMuted">
+              <option value="off" {% if settings.muted == "off" %}selected{% endif %}>Aus</option>
+              <option value="on" {% if settings.muted == "on" %}selected{% endif %}>Ein</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Animationen</span>
+            <select id="settingAnimations">
+              <option value="on" {% if settings.animations == "on" %}selected{% endif %}>Ein</option>
+              <option value="off" {% if settings.animations == "off" %}selected{% endif %}>Aus</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Theme</span>
+            <select id="settingTheme">
+              <option value="dark" {% if settings.theme == "dark" %}selected{% endif %}>Dunkel</option>
+              <option value="light" {% if settings.theme == "light" %}selected{% endif %}>Hell</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span>Spieltempo</span>
+            <select id="settingSpeed">
+              <option value="slow" {% if settings.speed == "slow" %}selected{% endif %}>Ruhig</option>
+              <option value="normal" {% if settings.speed == "normal" %}selected{% endif %}>Normal</option>
+              <option value="fast" {% if settings.speed == "fast" %}selected{% endif %}>Schnell</option>
+              <option value="instant" {% if settings.speed == "instant" %}selected{% endif %}>Sofort</option>
+            </select>
+          </label>
+          <button type="submit" class="primary-btn">Einstellungen speichern</button>
+        </form>
+      </section>
+
+    </section>
+
+    <section class="home-view about-view about-layout" data-home-view="about" hidden>
+      <section class="menu-panel about-hero bg-white shadow-xl ring-1 ring-slate-200">
+        <div class="about-hero-copy">
+          <div class="hero-badge">Über das Spiel</div>
+          <h2>Spassmonopoly Deluxe</h2>
+          <p class="panel-copy">Ein digitaler Spieltisch für den klassischen Brettspielabend: Würfeln, Felder kaufen, Mieten kassieren und Karten ziehen – lokal an einem Gerät oder gemeinsam in der Online-Lobby. Jeder Zug, jeder Besitz und jedes Log wird serverseitig gespeichert und beim Laden exakt wiederhergestellt.</p>
+          <div class="about-cta">
+            <a class="primary-btn" data-home-tab="play" href="#play">Jetzt spielen</a>
+            <a class="secondary-link" href="{{ url_for('lobby_page') }}">Online-Lobby öffnen</a>
+          </div>
+        </div>
+        <div class="about-stats">
+          <article class="stat-card">
+            <span class="stat-label">Spieler</span>
+            <strong class="stat-value">2 – 8</strong>
+            <span class="stat-meta">pro Runde</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Modus</span>
+            <strong class="stat-value">Lokal &amp; Online</strong>
+            <span class="stat-meta">Lobby-Sync</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Spielstände</span>
+            <strong class="stat-value">{{ saves|length }}</strong>
+            <span class="stat-meta">gespeichert</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="menu-panel about-features bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="panel-heading compact-heading">
+          <div>
+            <span class="panel-kicker">Funktionen</span>
+            <h3>Alles für den Spieltisch</h3>
+          </div>
+        </div>
+        <div class="about-feature-grid">
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">🎲</span>
+            <strong>Lokales Spiel</strong>
+            <p>2 bis 8 Spieler an einem Gerät – reihum würfeln, ziehen und handeln.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">🌐</span>
+            <strong>Online-Lobby</strong>
+            <p>Gemeinsam beitreten, bereitmelden und live synchron starten.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">💾</span>
+            <strong>Save Manager</strong>
+            <p>Runden benennen, laden, duplizieren oder löschen – jederzeit.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">📜</span>
+            <strong>Live-Verlauf</strong>
+            <p>Jeder Wurf, jede Karte und jede Strafe landet im durchsuchbaren Log.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="menu-panel about-how bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="panel-heading compact-heading">
+          <div>
+            <span class="panel-kicker">So geht's</span>
+            <h3>In drei Schritten loslegen</h3>
+          </div>
+        </div>
+        <ol class="about-steps">
+          <li>
+            <span class="about-step-num">1</span>
+            <div>
+              <strong>Runde starten</strong>
+              <p>Spieleranzahl wählen und „Lokales Spiel" drücken – oder die Lobby öffnen.</p>
+            </div>
+          </li>
+          <li>
+            <span class="about-step-num">2</span>
+            <div>
+              <strong>Ziehen &amp; entscheiden</strong>
+              <p>Würfeln, über das Brett ziehen und beim Feld kaufen, zahlen oder Karte ziehen.</p>
+            </div>
+          </li>
+          <li>
+            <span class="about-step-num">3</span>
+            <div>
+              <strong>Speichern &amp; fortsetzen</strong>
+              <p>Jederzeit benannt speichern und später nahtlos weiterspielen.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="menu-panel about-tech bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="about-tech-copy">
+          <span class="panel-kicker">Unter der Haube</span>
+          <p class="panel-copy">Serverseitige Spiellogik mit persistenten Spielständen und Echtzeit-Updates über WebSockets.</p>
+        </div>
+        <div class="feature-row compact-features">
+          <span class="feature-pill">Flask</span>
+          <span class="feature-pill">SQLAlchemy</span>
+          <span class="feature-pill">Socket.IO</span>
+          <span class="feature-pill">Responsive Board</span>
+        </div>
       </section>
     </section>
   </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="saveActionModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card modal-card-compact">
+      <button type="button" class="modal-close" aria-label="Schliessen" onclick="closeSaveAction()">x</button>
+      <div id="saveActionBadge" class="hero-badge">Spielstand</div>
+      <h2 id="saveActionTitle">Spielstand bearbeiten</h2>
+      <p id="saveActionIntro" class="modal-intro"></p>
+      <label id="saveNameLabel" class="field-label" for="saveActionName">Name</label>
+      <input id="saveActionName" type="text" maxlength="64" autocomplete="off">
+      <div class="modal-actions">
+        <button id="saveActionPrimary" type="button" class="primary-btn" onclick="submitSaveAction()">Speichern</button>
+        <button type="button" class="secondary-btn" onclick="closeSaveAction()">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='debug.js') }}"></script>
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
+  <script>
+    const toast = document.getElementById("toast");
+    let activeSaveAction = null;
+    const audio = new AudioManager({ volume: "{{ settings.volume }}" });
+    const saveList = document.getElementById("saveList");
+    const saveEmptyState = document.getElementById("saveEmptyState");
+
+    function readSettingsForm() {
+      return {
+        volume: document.getElementById("settingVolume").value,
+        music_volume: document.getElementById("settingMusicVolume").value,
+        effects_volume: document.getElementById("settingEffectsVolume").value,
+        muted: document.getElementById("settingMuted").value,
+        animations: document.getElementById("settingAnimations").value,
+        theme: document.getElementById("settingTheme").value,
+        speed: document.getElementById("settingSpeed").value,
+      };
+    }
+
+    function applySettings(settings) {
+      audio.setSettings(settings);
+      document.body.classList.toggle("theme-light", settings.theme === "light");
+      document.body.classList.toggle("theme-dark", settings.theme !== "light");
+      document.body.classList.toggle("reduce-motion", settings.animations === "off");
+      document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : settings.speed === "instant" ? "0.05" : "1");
+      // Forward audio settings to the persistent shell that owns the music.
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "sm-settings", settings }, window.location.origin);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      window.setTimeout(() => toast.classList.remove("show"), 2800);
+    }
+
+    async function apiPost(url, payload = null) {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const options = { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken } };
+      if (payload) options.body = JSON.stringify(payload);
+      debugLog("home", "api.post", { url, hasPayload: Boolean(payload) });
+      const response = await fetch(url, options);
+      const data = await response.json();
+      debugLog("home", "api.response", { url, status: response.status, ok: data.ok });
+      if (!response.ok || !data.ok) throw new Error(data.msg || "Aktion fehlgeschlagen.");
+      return data;
+    }
+
+    async function loadSave(saveId) {
+      try {
+        debugLog("save-manager", "load.start", { saveId });
+        const data = await apiPost(`/api/save/${saveId}/load`);
+        showToast(data.message || "Spielstand geladen.");
+        audio.play("save");
+        window.setTimeout(() => {
+          window.location.href = data.redirect_url || "/board";
+        }, 220);
+      } catch (error) {
+        debugLog("save-manager", "load.error", { saveId, message: error.message });
+        showToast(error.message);
+      }
+    }
+
+    function openSaveAction(action, saveId, saveName) {
+      debugLog("save-manager", "modal.open", { action, saveId });
+      activeSaveAction = { action, saveId, saveName };
+      const modal = document.getElementById("saveActionModal");
+      const title = document.getElementById("saveActionTitle");
+      const intro = document.getElementById("saveActionIntro");
+      const input = document.getElementById("saveActionName");
+      const label = document.getElementById("saveNameLabel");
+      const primary = document.getElementById("saveActionPrimary");
+
+      input.value = action === "duplicate" ? `Kopie von ${saveName}` : saveName;
+      input.style.display = action === "delete" ? "none" : "block";
+      label.style.display = action === "delete" ? "none" : "block";
+      primary.classList.toggle("danger-btn", action === "delete");
+
+      if (action === "rename") {
+        title.textContent = "Spielstand umbenennen";
+        intro.textContent = "Der Spielstand bleibt erhalten und bekommt nur einen neuen Anzeigenamen.";
+        primary.textContent = "Umbenennen";
+      } else if (action === "duplicate") {
+        title.textContent = "Spielstand duplizieren";
+        intro.textContent = "Erstellt eine zweite Version mit identischem Spielzustand.";
+        primary.textContent = "Duplizieren";
+      } else {
+        title.textContent = "Spielstand löschen";
+        intro.textContent = `Willst du '${saveName}' wirklich löschen?`;
+        primary.textContent = "Löschen";
+      }
+
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+      if (action !== "delete") input.focus();
+    }
+
+    function closeSaveAction() {
+      const modal = document.getElementById("saveActionModal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      activeSaveAction = null;
+    }
+
+    async function submitSaveAction() {
+      if (!activeSaveAction) return;
+      const { action, saveId } = activeSaveAction;
+      const name = document.getElementById("saveActionName").value.trim();
+      try {
+        let data;
+        if (action === "rename") data = await apiPost(`/api/save/${saveId}/rename`, { name });
+        if (action === "duplicate") data = await apiPost(`/api/save/${saveId}/duplicate`, { name });
+        if (action === "delete") data = await apiPost(`/api/save/${saveId}/delete`);
+        debugLog("save-manager", "action.success", { action, saveId, newSaveId: data.save?.id });
+        updateSaveList(action, saveId, data.save);
+        showToast(data.message || "Spielstand aktualisiert.");
+        audio.play("success");
+        closeSaveAction();
+      } catch (error) {
+        debugLog("save-manager", "action.error", { action, saveId, message: error.message });
+        showToast(error.message);
+      }
+    }
+
+    function saveSearchText(save) {
+      return `${save.name} ${save.created_at} ${save.updated_at} ${save.status}`.toLowerCase();
+    }
+
+    function saveCardMarkup(save) {
+      const active = save.active_player || "n/a";
+      return `
+        <article class="save-card save-card-pro bg-white shadow-md ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-lg" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}" data-search="${saveSearchText(save)}">
+          <div class="save-title-block">
+            <strong>${escapeHtml(save.name)}</strong>
+            <p>${save.player_count} Spieler &middot; Runde ${save.round} &middot; ${escapeHtml(save.status)}</p>
+          </div>
+          <div class="save-meta save-meta-grid">
+            <span>Erstellt <strong>${escapeHtml(String(save.created_at).slice(0, 10))}</strong></span>
+            <span>Geändert <strong>${escapeHtml(String(save.updated_at).slice(0, 10))}</strong></span>
+            <span>Aktiv <strong>${escapeHtml(active)}</strong></span>
+          </div>
+          <div class="save-actions">
+            <button type="button" class="primary-btn" data-save-action="load" data-save-id="${save.id}">Laden</button>
+            <button type="button" class="secondary-btn icon-btn" title="Umbenennen" data-save-action="rename" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">Aa</button>
+            <button type="button" class="secondary-btn icon-btn" title="Duplizieren" data-save-action="duplicate" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">++</button>
+            <button type="button" class="secondary-btn icon-btn danger-text" title="Löschen" data-save-action="delete" data-save-id="${save.id}" data-save-name="${escapeHtml(save.name)}">x</button>
+          </div>
+        </article>
+      `;
+    }
+
+    function refreshSaveEmptyState() {
+      const hasSaves = Boolean(saveList?.querySelector(".save-card-pro"));
+      if (saveList) saveList.hidden = !hasSaves;
+      if (saveEmptyState) saveEmptyState.classList.toggle("hidden", hasSaves);
+    }
+
+    function updateSaveList(action, saveId, save) {
+      const card = document.querySelector(`[data-save-id="${saveId}"]`);
+      if (action === "delete") {
+        card?.remove();
+        refreshSaveEmptyState();
+        return;
+      }
+      if (!save || !saveList) return;
+      if (action === "rename" && card) {
+        card.outerHTML = saveCardMarkup(save);
+        refreshSaveEmptyState();
+        return;
+      }
+      if (action === "duplicate") {
+        saveList.insertAdjacentHTML("afterbegin", saveCardMarkup(save));
+        refreshSaveEmptyState();
+      }
+    }
+
+    document.getElementById("saveSearch")?.addEventListener("input", (event) => {
+      const term = event.target.value.trim().toLowerCase();
+      document.querySelectorAll(".save-card-pro").forEach((card) => {
+        card.hidden = !card.dataset.search.includes(term);
+      });
+    });
+
+    saveList?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-save-action]");
+      if (!button) return;
+      const action = button.dataset.saveAction;
+      const saveId = button.dataset.saveId;
+      const saveName = button.dataset.saveName || button.closest("[data-save-name]")?.dataset.saveName || "";
+      debugLog("save-manager", "button.click", { action, saveId });
+      if (action === "load") {
+        loadSave(saveId);
+      } else {
+        openSaveAction(action, saveId, saveName);
+      }
+    });
+
+    document.getElementById("settingsForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const data = await apiPost("/api/settings", {
+          ...readSettingsForm(),
+        });
+        applySettings(data.settings);
+        showToast(data.message || "Einstellungen gespeichert.");
+        audio.play("save");
+      } catch (error) {
+        showToast(error.message);
+      }
+    });
+
+    ["settingVolume", "settingMusicVolume", "settingEffectsVolume", "settingMuted", "settingAnimations", "settingTheme", "settingSpeed"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => applySettings(readSettingsForm()));
+      document.getElementById(id).addEventListener("change", () => {
+        applySettings(readSettingsForm());
+        audio.play("button");
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
+    });
+
+    document.getElementById("saveActionModal").addEventListener("click", (event) => {
+      if (event.target.id === "saveActionModal") closeSaveAction();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeSaveAction();
+    });
+
+    document.querySelectorAll("[data-home-tab]").forEach((tab) => {
+      tab.addEventListener("click", (event) => {
+        event.preventDefault();
+        const target = tab.dataset.homeTab;
+        document.querySelectorAll("[data-home-tab]").forEach((item) => item.classList.toggle("active", item === tab));
+        document.querySelectorAll("[data-home-view]").forEach((view) => {
+          const isActive = view.dataset.homeView === target;
+          view.classList.toggle("active", isActive);
+          view.hidden = !isActive;
+        });
+        window.history.replaceState(null, "", `#${target}`);
+      });
+    });
+
+    const initialTab = window.location.hash.replace("#", "");
+    if (initialTab) {
+      document.querySelector(`[data-home-tab="${initialTab}"]`)?.click();
+    }
+    applySettings(readSettingsForm());
+
+    // Background music runs as one continuous loop across pages.
+    audio.enableContinuousPlayback();
+</script>
 </body>
 </html>

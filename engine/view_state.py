@@ -1,23 +1,28 @@
-from .game_engine import get_field_type
+from .game_engine import START_BONUS, clean_display_text, get_field_type, normalize_event_log
 
 
-def get_popup_hint(field):
+def get_popup_hint(field, active_player=None):
     if not field:
         return None
 
     field_type = get_field_type(field)
     if field["ist_kaufbar"] and not field.get("besitzer"):
-        return f"Dieses Feld ist frei. Du kannst es jetzt fuer {field.get('kaufpreis') or '0'} sichern."
+        return f"Dieses Feld ist frei. Du kannst es für {field.get('kaufpreis') or '0 Punkte'} kaufen."
     if field.get("besitzer"):
-        return f"Dieses Feld gehoert {field['besitzer']}. Die Abgabe von {field.get('miete') or '0'} wird jetzt faellig."
+        if active_player and (
+            field.get("owner_player_id") == active_player.get("id")
+            or field.get("besitzer") == active_player.get("name")
+        ):
+            return "Das ist dein eigenes Feld. Du kannst den Zug ohne Zahlung abschliessen."
+        return f"Dieses Feld gehört {field['besitzer']}. Die Miete von {field.get('miete') or '0 Punkte'} wird jetzt fällig."
     if field_type == "gemeinschaft":
-        return "Dieses Gemeinschaftsfeld loest ein zufaelliges Ereignis fuer dich oder die ganze Runde aus."
+        return "Dieses Gemeinschaftsfeld löst ein zufälliges Ereignis für dich oder die ganze Runde aus."
     if field_type == "steuer":
-        return f"Dieses Feld verlangt eine feste Abgabe von {field.get('miete') or '0'}."
+        return f"Dieses Feld verlangt eine Steuer von {field.get('miete') or '0 Punkte'}."
     if field_type == "gefangnis":
-        return "Dieses Feld verhaengt eine Spielstrafe in Form von 2 zusaetzlichen Aktionspunkten."
+        return "Dieses Feld ist ein Pflichtstopp ohne Punkteänderung."
     if field_type == "los":
-        return "Auf Los darfst du 1 Aktionspunkt abziehen."
+        return f"Beim Passieren von Los erhältst du {START_BONUS} Punkte."
     if field_type == "spezial":
         return field.get("zusatz_regel") or "Dieses Spezialfeld hat einen eigenen Effekt."
     return field.get("zusatz_regel")
@@ -67,9 +72,11 @@ def get_scoreboard(game_state):
         current_field = fields[position_index]
         scoreboard.append(
             {
+                "id": player.get("id"),
                 "name": player["name"],
                 "position": current_field["name"],
-                "drinks": player.get("action_points", 0),
+                "positionIndex": position_index,
+                "points": player.get("action_points", 0),
                 "steps": player.get("total_steps", 0),
                 "properties": owner_counts.get(player["name"], 0),
                 "is_active": index == active_index,
@@ -111,6 +118,11 @@ def build_game_payload(game_state, current_player_id=None):
     active_index = game_state.get("active_player_index", 0)
     current_player_index = get_current_player_index(game_state, current_player_id)
     lobby_mode = game_state.get("room", {}).get("mode") == "lobby"
+    identity = game_state.get("identity") or {}
+    host_id = identity.get("host_id") or game_state.get("room", {}).get("host_id")
+    game_status = game_state.get("game", {}).get("status", "running")
+    event_log = normalize_event_log(game_state.get("event_log", []))
+    last_event_entry = game_state.get("last_event_entry") or (event_log[-1] if event_log else None)
 
     popup_field = None
     popup_player = None
@@ -120,7 +132,7 @@ def build_game_payload(game_state, current_player_id=None):
         popup_field = fields[pending_action["field_index"]]
         popup_player = pending_action["player_index"]
         popup_roll = pending_action.get("roll")
-        popup_hint = get_popup_hint(popup_field)
+        popup_hint = get_popup_hint(popup_field, players[popup_player] if popup_player is not None else None)
 
     display_roll = dice.get("current_roll") or popup_roll or dice.get("last_roll")
 
@@ -131,7 +143,10 @@ def build_game_payload(game_state, current_player_id=None):
         "spieler": [player["name"] for player in players],
         "aktiver": active_index,
         "currentPlayerIndex": current_player_index,
-        "canAct": True if not lobby_mode else current_player_index == active_index,
+        "hostId": host_id,
+        "joinCode": identity.get("join_code") or game_state.get("room", {}).get("join_code"),
+        "isHost": (not lobby_mode) or bool(current_player_id and current_player_id == host_id),
+        "canAct": (game_status != "finished") and (True if not lobby_mode else current_player_index == active_index),
         "activePlayerName": get_active_player_name(game_state),
         "felder": fields,
         "positionen": [player.get("position", 0) for player in players],
@@ -147,8 +162,9 @@ def build_game_payload(game_state, current_player_id=None):
         "ownership": get_ownership_summary(fields),
         "highlights": get_game_highlights(game_state),
         "phase": game_state.get("game", {}).get("phase", "roll"),
-        "gameStatus": game_state.get("game", {}).get("status", "running"),
-        "lastEvent": game_state.get("last_event"),
-        "eventLog": game_state.get("event_log", []),
+        "gameStatus": game_status,
+        "lastEvent": clean_display_text(game_state.get("last_event")),
+        "lastEventEntry": last_event_entry,
+        "eventLog": event_log,
     }
 

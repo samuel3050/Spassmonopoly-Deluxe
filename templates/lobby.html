@@ -3,426 +3,364 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Spaßmonopoly Deluxe - Lobby</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Spassmonopoly Deluxe - Lobby</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-  <style>
-    .lobby-shell {
-      width: min(100%, 600px);
-      margin: 0 auto;
-    }
-
-    .lobby-card {
-      background: var(--panel);
-      border: 3px solid var(--panel-border);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
-      padding: 36px;
-    }
-
-    .lobby-section {
-      margin-bottom: 28px;
-    }
-
-    .lobby-section h2 {
-      margin-bottom: 16px;
-      font-size: 1.3rem;
-    }
-
-    .join-form {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .join-form input {
-      flex: 1;
-      border: 3px solid var(--panel-border);
-      border-radius: 16px;
-      padding: 14px 16px;
-      background: #ffffff;
-      color: var(--text-dark);
-      font-size: 1rem;
-    }
-
-    .join-form button {
-      padding: 14px 24px;
-      border: none;
-      border-radius: 16px;
-      background: var(--accent-yellow);
-      color: var(--text-dark);
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow);
-    }
-
-    .join-form button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
-    }
-
-    .players-list {
-      display: grid;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .player-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px;
-      background: #fff;
-      border: 2px solid var(--panel-border);
-      border-radius: var(--radius-md);
-      transition: background 0.2s;
-    }
-
-    .player-item.ready {
-      background: #f0ffe0;
-    }
-
-    .player-name {
-      font-weight: 600;
-      color: var(--text-dark);
-      flex: 1;
-    }
-
-    .player-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      background: #ffe0e0;
-      color: #c41e3a;
-    }
-
-    .player-status.ready {
-      background: #e0ffe0;
-      color: #2d7a2d;
-    }
-
-    .player-ready-btn {
-      margin-left: 12px;
-      padding: 10px 16px;
-      border: 2px solid var(--panel-border);
-      border-radius: 12px;
-      background: white;
-      color: var(--text-dark);
-      font-weight: 700;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .player-ready-btn:hover {
-      background: var(--accent-yellow);
-    }
-
-    .player-ready-btn.ready {
-      background: var(--accent-green);
-      border-color: var(--accent-green);
-      color: white;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 24px;
-      color: var(--text-soft);
-    }
-
-    .lobby-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 24px;
-    }
-
-    .primary-btn, .secondary-btn {
-      flex: 1;
-      padding: 16px 24px;
-      border: 3px solid var(--panel-border);
-      border-radius: var(--radius-md);
-      font-weight: 700;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      box-shadow: var(--shadow);
-    }
-
-    .primary-btn {
-      background: var(--accent-yellow);
-      color: var(--text-dark);
-    }
-
-    .primary-btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 0 rgba(47, 43, 37, 0.25);
-    }
-
-    .primary-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .secondary-btn {
-      background: var(--panel);
-      color: var(--text-dark);
-      border-color: var(--panel-border);
-    }
-
-    .secondary-btn:hover {
-      transform: translateY(-2px);
-    }
-
-    .status-message {
-      padding: 12px 16px;
-      border-radius: var(--radius-md);
-      font-weight: 600;
-      margin-bottom: 16px;
-    }
-
-    .status-message.info {
-      background: #e3f2fd;
-      color: #1976d2;
-      border: 2px solid #1976d2;
-    }
-
-    .status-message.success {
-      background: #e8f5e9;
-      color: #388e3c;
-      border: 2px solid #388e3c;
-    }
-
-    .status-message.warning {
-      background: #fff3e0;
-      color: #f57c00;
-      border: 2px solid #f57c00;
-    }
-
-    .lobby-header {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-
-    .lobby-header h1 {
-      font-size: 2rem;
-      margin: 0 0 8px;
-    }
-
-    .lobby-header .hero-badge {
-      justify-content: center;
-      margin-bottom: 12px;
-    }
-
-    .loading {
-      display: inline-block;
-      width: 4px;
-      height: 4px;
-      background: currentColor;
-      border-radius: 50%;
-      animation: pulse 1.5s infinite;
-      margin: 0 2px;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 1; }
-    }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
-<body class="page page-lobby">
-  <main class="lobby-shell">
-    <section class="lobby-card">
-      <div class="lobby-header">
-        <div class="hero-badge" style="justify-content: center;">Warteraum</div>
-        <h1>Spaßmonopoly Deluxe</h1>
-        <p class="panel-copy">Wartet hier, bis sich alle Spieler verbunden haben und bereit sind.</p>
-      </div>
-
-      <div class="lobby-actions" style="margin-bottom: 24px;">
-        <form method="post" action="{{ url_for('lobby_continue') }}" style="flex: 1;">
-          <button type="submit" class="primary-btn" {% if not has_saved_game %}disabled{% endif %}>
-            Continue Last Game
-          </button>
-        </form>
-        <form method="post" action="{{ url_for('lobby_new') }}" style="flex: 1;">
-          <button type="submit" class="secondary-btn">New Game</button>
-        </form>
-      </div>
-
-      <div id="statusMessage"></div>
-
-      <div class="lobby-section" id="joinSection">
-        <h2>Dem Spiel beitreten</h2>
-        <form class="join-form" onsubmit="joinGame(event)">
-          <input 
-            type="text" 
-            id="playerName" 
-            placeholder="Dein Name..." 
-            required 
-            maxlength="20"
-            autocomplete="off"
-          >
-          <button type="submit">Beitreten</button>
-        </form>
-      </div>
-
-      <div class="lobby-section">
-        <h2>Spieler online (<span id="playerCount">0</span>)</h2>
-        <div id="playersList" class="players-list">
-          <div class="empty-state">Noch keine Spieler verbunden. Starten Sie jetzt!</div>
+<body class="page page-lobby bg-slate-50 text-slate-900 antialiased">
+  <main class="lobby-room min-h-screen">
+    <header class="main-menu-header lobby-main-header bg-white/90 shadow-sm ring-1 ring-slate-200">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">SD</div>
+        <div>
+          <div class="hero-badge">Lobby</div>
+          <h1>Spassmonopoly Deluxe</h1>
+          <p class="panel-copy">Spieler sammeln, bereit setzen und die Runde sauber starten.</p>
         </div>
       </div>
+      <a href="{{ url_for('index') }}" class="secondary-link">Hauptmenü</a>
+    </header>
 
-      <div class="lobby-actions">
-        <button id="startBtn" class="primary-btn" onclick="startGame()" disabled>
-          Spiel starten
-        </button>
-        <button id="refreshBtn" class="secondary-btn" onclick="updateLobby()">
-          Aktualisieren
-        </button>
-      </div>
+    <section class="lobby-grid">
+      <aside class="lobby-panel lobby-info-panel bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="hero-badge">Spielinfo</div>
+        <h2>Warteraum</h2>
+        <div class="lobby-code-box">
+          <span>Join Code</span>
+          <strong id="joinCode">{{ join_code or "------" }}</strong>
+        </div>
+        <div class="setting-list">
+          <div><span>Modus</span><strong>Classic Deluxe</strong></div>
+          <div><span>Spieler</span><strong>{{ min_players }}-{{ max_players }}</strong></div>
+          <div><span>Start</span><strong>Alle bereit</strong></div>
+          <div><span>Speichern</span><strong>Save Manager</strong></div>
+        </div>
+      </aside>
+
+      <section class="lobby-panel lobby-players-panel bg-white shadow-xl ring-1 ring-slate-200">
+        <div class="panel-heading">
+          <div>
+            <div class="hero-badge">Spielerliste</div>
+            <h2>Teilnehmer <span id="playerCount">0</span>/{{ max_players }}</h2>
+          </div>
+          <span id="readyChip" class="status-chip">Wartet</span>
+        </div>
+
+        <div id="statusMessage" class="status-message-slot"></div>
+
+        <form id="joinForm" class="join-pro-form" onsubmit="joinGame(event)">
+          <label class="field-label" for="playerName">Dein Anzeigename</label>
+          <div class="join-input-row">
+            <input type="text" id="playerName" placeholder="z.B. Samuel" required minlength="2" maxlength="24" autocomplete="off">
+            <input type="text" id="joinCodeInput" placeholder="Code" maxlength="6" autocomplete="off">
+            <button type="submit" class="primary-btn">Beitreten</button>
+          </div>
+          <p id="joinHint" class="input-hint">2 bis 24 Zeichen, jeder Name nur einmal.</p>
+        </form>
+
+        <div id="playersList" class="players-list-pro">
+          <div class="empty-product-state">
+            <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+            <strong>Noch niemand in der Lobby</strong>
+            <p class="empty-note">Der erste Spieler wird automatisch Host.</p>
+          </div>
+        </div>
+      </section>
+
+      <aside class="lobby-panel lobby-actions-panel bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="hero-badge">Aktionen</div>
+        <h2>Runde starten</h2>
+        <button id="startBtn" class="primary-btn launch-action" onclick="startGame()" disabled>Spiel starten</button>
+        <p id="startHint" class="panel-copy">Mindestens {{ min_players }} Spieler und alle müssen bereit sein.</p>
+
+        <div class="action-stack">
+          <form method="post" action="{{ url_for('lobby_continue') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <button id="continueBtn" type="submit" class="secondary-btn full-width" {% if not has_saved_game %}disabled{% endif %}>Letzte Runde fortsetzen</button>
+          </form>
+          <form method="post" action="{{ url_for('lobby_new') }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <button id="resetBtn" type="submit" class="secondary-btn full-width">Lobby zurücksetzen</button>
+          </form>
+        </div>
+
+        <div class="lobby-progress">
+          <span id="progressLabel">0% bereit</span>
+          <div class="progress-track"><span id="progressFill"></span></div>
+        </div>
+
+        <div class="lobby-conn">
+          <span id="connDot" class="conn-dot"></span>
+          <span id="connLabel">Verbinde…</span>
+        </div>
+      </aside>
     </section>
   </main>
 
+  <script src="{{ url_for('static', filename='debug.js') }}"></script>
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
   <script>
     let currentPlayerId = {{ current_player_id|tojson }};
-    let autoRefreshInterval = null;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    const appSettings = {{ settings|tojson }};
+    const audio = new AudioManager(appSettings);
 
-    function showStatus(message, type = 'info') {
-      const msgEl = document.getElementById('statusMessage');
-      msgEl.innerHTML = `<div class="status-message ${type}">${message}</div>`;
-      setTimeout(() => {
-        msgEl.innerHTML = '';
-      }, 5000);
+    /* Honor the global theme so every page (Start, Lobby, Brett) matches. */
+    function applyTheme(settings) {
+      const theme = (settings && settings.theme) || "light";
+      document.body.classList.toggle("theme-light", theme === "light");
+      document.body.classList.toggle("theme-dark", theme !== "light");
+    }
+    applyTheme(appSettings);
+    const minPlayers = {{ min_players }};
+    const maxPlayers = {{ max_players }};
+    const palette = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function showStatus(message, type = "info") {
+      const msgEl = document.getElementById("statusMessage");
+      const status = document.createElement("div");
+      status.className = `status-message ${type}`;
+      status.textContent = message;
+      msgEl.replaceChildren(status);
+      window.setTimeout(() => msgEl.replaceChildren(), 5200);
+    }
+
+    function validateName(name) {
+      if (name.length < 2) return "Der Name muss mindestens 2 Zeichen lang sein.";
+      if (name.length > 24) return "Der Name darf maximal 24 Zeichen lang sein.";
+      return "";
+    }
+
+    /* ── Socket.IO live updates (polling fallback if socket is down) ── */
+    let socketConnected = false;
+    const socket = io({ transports: ["polling", "websocket"] });
+
+    socket.on("connect", () => {
+      socketConnected = true;
+      setConn(true);
+      if (currentPlayerId) socket.emit("client_identify", { player_id: currentPlayerId });
+      updateLobby();
+    });
+    socket.on("disconnect", () => { socketConnected = false; setConn(false); });
+    socket.io?.on?.("reconnect_attempt", () => setConn(false));
+    socket.on("lobby_update", renderLobby);
+    socket.on("game_started", (data) => {
+      showStatus("Spiel wird geöffnet.", "success");
+      window.setTimeout(() => { window.location.href = data.redirect_url || "/board"; }, 350);
+    });
+    socket.on("host_migrated", (data) => {
+      if (data.new_host_id === currentPlayerId) showStatus("Du bist jetzt der Host.", "success");
+    });
+    socket.on("lobby_closed", (data) => {
+      showStatus(data.reason || "Lobby geschlossen.", "warning");
+      window.setTimeout(() => { window.location.href = "/menu"; }, 2500);
+    });
+    socket.on("settings_update", (data) => { audio?.setSettings?.(data.settings); applyTheme(data.settings); });
+    window.setInterval(() => socket.emit("ping"), 15000);
+
+    // Safety net: while the realtime socket is not connected, poll so the lobby
+    // always reflects other players. When the socket is live, this stays quiet.
+    window.setInterval(() => { if (!socketConnected) updateLobby(); }, 2500);
+
+    function setConn(ok) {
+      document.getElementById("connDot")?.classList.toggle("on", ok);
+      const lbl = document.getElementById("connLabel");
+      if (lbl) lbl.textContent = ok ? "Verbunden" : "Verbinde…";
     }
 
     async function joinGame(event) {
       event.preventDefault();
-      const name = document.getElementById('playerName').value.trim();
-      
-      if (!name) {
-        showStatus('Bitte gib deinen Namen ein', 'warning');
+      const input = document.getElementById("playerName");
+      const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
+      const name = input.value.trim();
+      const validation = validateName(name);
+      if (validation) {
+        showStatus(validation, "warning");
         return;
       }
 
       try {
-        const response = await fetch('/lobby/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `name=${encodeURIComponent(name)}`
+        debugLog?.("lobby", "join.start", { name, hasCode: Boolean(code) });
+        const response = await fetch("/lobby/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrfToken },
+          body: `name=${encodeURIComponent(name)}&join_code=${encodeURIComponent(code)}`,
         });
-
         const data = await response.json();
-        if (data.ok) {
-          currentPlayerId = data.player_id;
-          document.getElementById('joinSection').style.display = 'none';
-          showStatus(`Willkommen ${name}! Bitte warte, bis alle Spieler bereit sind.`, 'success');
-          updateLobby();
-          startAutoRefresh();
-        } else {
-          showStatus(data.msg || 'Fehler beim Beitreten', 'warning');
+        debugLog?.("lobby", "join.response", { status: response.status, ok: data.ok });
+        if (!response.ok || !data.ok) {
+          showStatus(data.msg || "Beitritt fehlgeschlagen.", "warning");
+          return;
         }
-      } catch (err) {
-        showStatus('Verbindungsfehler', 'warning');
+        currentPlayerId = data.player_id;
+        socket.emit("client_identify", { player_id: currentPlayerId });
+        if (data.game_started) {
+          window.location.href = data.redirect_url || "/board";
+          return;
+        }
+        document.getElementById("joinForm").classList.add("joined");
+        showStatus(`Willkommen ${name}. Jetzt noch bereit setzen.`, "success");
+        await updateLobby();   // render myself immediately, don't wait for socket
+      } catch (error) {
+        debugLog?.("lobby", "join.error", { message: error.message });
+        showStatus("Verbindungsfehler beim Beitreten.", "warning");
+      }
+    }
+
+    function playerCard(player, index) {
+      const isCurrentPlayer = currentPlayerId === player.id;
+      const readyClass = player.ready ? "ready" : "waiting";
+      const initials = player.name.slice(0, 2).toUpperCase();
+      return `
+        <article class="player-card ${readyClass} ${isCurrentPlayer ? "is-self" : ""}">
+          <div class="player-avatar ${palette[index % palette.length]}">${escapeHtml(initials)}</div>
+          <div class="player-card-main">
+            <div class="player-card-topline">
+              <strong>${escapeHtml(player.name)}</strong>
+              ${player.host ? '<span class="status-chip status-chip-hot">Host</span>' : ""}
+            </div>
+            <span class="player-order">Platz ${escapeHtml(player.order)} ${isCurrentPlayer ? "&middot; Du" : ""}</span>
+          </div>
+          <span class="player-status-pill ${readyClass}">${player.ready ? "Bereit" : "Wartet"}</span>
+          ${isCurrentPlayer ? `<button class="player-ready-btn ${player.ready ? "ready" : ""}" onclick="toggleReady()">${player.ready ? "Bereit" : "Bereit setzen"}</button>` : ""}
+        </article>
+      `;
+    }
+
+    function renderProgress(players) {
+      const ready = players.filter((player) => player.ready).length;
+      const percent = players.length ? Math.round((ready / players.length) * 100) : 0;
+      document.getElementById("progressLabel").textContent = `${percent}% bereit`;
+      document.getElementById("progressFill").style.width = `${percent}%`;
+      document.getElementById("readyChip").textContent = `${ready}/${players.length} bereit`;
+    }
+
+    function renderLobby(data) {
+      if (!data || !Array.isArray(data.players)) return;
+      debugLog?.("lobby", "state.render", { players: data.players.length, hostId: data.host_id });
+
+      const playersList = document.getElementById("playersList");
+      document.getElementById("playerCount").textContent = data.players.length;
+      document.getElementById("joinCode").textContent = data.join_code || "------";
+
+      // Only jump into a running game if I am actually one of its players.
+      const iAmInGame = !!currentPlayerId && data.players.some((p) => p.id === currentPlayerId);
+      if (data.game_started && iAmInGame) {
+        window.location.href = data.redirect_url || "/board";
+        return;
+      }
+
+      if (!data.players.length) {
+        playersList.innerHTML = `
+          <div class="empty-product-state">
+            <div class="brand-mark brand-mark-small" aria-hidden="true">SD</div>
+            <strong>Noch niemand in der Lobby</strong>
+            <p class="empty-note">Der erste Spieler wird automatisch Host.</p>
+          </div>
+        `;
+      } else {
+        playersList.innerHTML = data.players.map(playerCard).join("");
+      }
+
+      renderProgress(data.players);
+      const startBtn = document.getElementById("startBtn");
+      const startHint = document.getElementById("startHint");
+      const continueBtn = document.getElementById("continueBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const isHost = currentPlayerId && data.host_id === currentPlayerId;
+      const hasEnough = data.players.length >= minPlayers;
+      startBtn.disabled = data.game_started || !data.all_ready || !hasEnough || !isHost;
+      startBtn.textContent = data.game_started ? "Spiel läuft" : "Spiel starten";
+      if (!currentPlayerId) startHint.textContent = "Bitte erst beitreten.";
+      else if (!isHost) startHint.textContent = "Nur der Host kann die Runde starten.";
+      else if (!hasEnough) startHint.textContent = `Noch ${minPlayers - data.players.length} Spieler bis zum Start.`;
+      else if (!data.all_ready) startHint.textContent = "Alle Spieler müssen bereit sein.";
+      else startHint.textContent = "Alles bereit. Die Runde kann starten.";
+      if (continueBtn) {
+        continueBtn.hidden = !isHost;
+        continueBtn.disabled = !isHost || !data.has_saved_game;
+      }
+      if (resetBtn) {
+        resetBtn.hidden = Boolean(data.players.length) && !isHost;
+        resetBtn.disabled = Boolean(data.players.length) && !isHost;
       }
     }
 
     async function updateLobby() {
       try {
-        const response = await fetch('/lobby/state');
+        const response = await fetch("/lobby/state");
         const data = await response.json();
-
-        // Update player list
-        const playersList = document.getElementById('playersList');
-        const playerCount = document.getElementById('playerCount');
-        playerCount.textContent = data.players.length;
-
-        if (data.players.length === 0) {
-          playersList.innerHTML = '<div class="empty-state">Noch keine Spieler verbunden.</div>';
-          document.getElementById('startBtn').disabled = true;
-          return;
-        }
-
-        if (data.game_started && currentPlayerId) {
-          window.location.href = '/board';
-          return;
-        }
-
-        playersList.innerHTML = '';
-        data.players.forEach(player => {
-          const isCurrentPlayer = currentPlayerId === player.id;
-          const readyClass = player.ready ? 'ready' : '';
-          const statusText = player.ready ? '✓ Bereit' : 'Wartet...';
-          const statusClass = player.ready ? 'ready' : '';
-
-          const playerEl = document.createElement('div');
-          playerEl.className = `player-item ${readyClass}`;
-          playerEl.innerHTML = `
-            <span class="player-name">${player.name}</span>
-            <span class="player-status ${statusClass}">${statusText}</span>
-            ${isCurrentPlayer ? `<button class="player-ready-btn ${readyClass}" onclick="toggleReady()">
-              ${player.ready ? '✓ Bereit' : 'Bereit'}
-            </button>` : ''}
-          `;
-          playersList.appendChild(playerEl);
-        });
-
-        const startBtn = document.getElementById('startBtn');
-        startBtn.disabled = data.game_started || !data.all_ready || data.players.length < 2;
-        startBtn.textContent = data.game_started ? 'Spiel läuft' : 'Spiel starten';
-      } catch (err) {
-        console.error('Fehler beim Aktualisieren:', err);
+        if (!response.ok || !data.ok) throw new Error(data.msg || "Lobby konnte nicht geladen werden.");
+        renderLobby(data);
+      } catch (error) {
+        showStatus(error.message || "Lobby-Update fehlgeschlagen.", "warning");
       }
     }
 
     async function toggleReady() {
-      if (!currentPlayerId) return;
-
+      if (!currentPlayerId) {
+        showStatus("Bitte zuerst beitreten.", "warning");
+        return;
+      }
       try {
-        const response = await fetch('/lobby/ready', {
-          method: 'POST'
-        });
-
+        const response = await fetch("/lobby/ready", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
         const data = await response.json();
-        if (data.ok) {
-          updateLobby();
+        if (!response.ok || !data.ok) {
+          showStatus(data.msg || "Status konnte nicht geändert werden.", "warning");
+        } else {
+          await updateLobby();   // reflect my own ready state immediately
         }
-      } catch (err) {
-        showStatus('Fehler beim Ändern des Status', 'warning');
+      } catch (error) {
+        showStatus("Bereit-Status konnte nicht geändert werden.", "warning");
       }
     }
 
     async function startGame() {
+      const startBtn = document.getElementById("startBtn");
+      startBtn.disabled = true;
+      startBtn.textContent = "Startet...";
       try {
-        const response = await fetch('/lobby/start', {
-          method: 'POST'
-        });
-
+        debugLog?.("lobby", "start.request", {});
+        const response = await fetch("/lobby/start", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
         const data = await response.json();
-        if (data.ok) {
-          showStatus('Spiel wird gestartet...', 'success');
-          setTimeout(() => {
-            window.location.href = '/board';
-          }, 500);
-        } else {
-          showStatus(data.msg || 'Fehler beim Starten', 'warning');
+        if (!response.ok || !data.ok) {
+          showStatus(data.msg || "Start fehlgeschlagen.", "warning");
+          await updateLobby();
+          return;
         }
-      } catch (err) {
-        showStatus('Verbindungsfehler', 'warning');
+        showStatus("Spiel wird geöffnet.", "success");
+        window.setTimeout(() => {
+          window.location.href = data.redirect_url || "/board";
+        }, 350);
+      } catch (error) {
+        showStatus("Verbindungsfehler beim Starten.", "warning");
+        await updateLobby();
       }
     }
 
-    function startAutoRefresh() {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-      autoRefreshInterval = setInterval(updateLobby, 1000);
-    }
-
-    // Initial load
+    // Initial load (one request). Live updates afterwards come via Socket.IO.
     updateLobby();
+
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
+    });
+
+    // Background music runs as one continuous loop across pages.
+    audio.enableContinuousPlayback();
   </script>
 </body>
 </html>

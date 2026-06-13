@@ -4,11 +4,10 @@ __pycache__/
 
 .env
 instance/
-saves/
 *.db
 *.sqlite
 *.sqlite3
 
-data/current_game_state.json
 tempCodeRunnerFile.*
 *.code-workspace
+flask-*.log
