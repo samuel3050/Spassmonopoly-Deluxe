@@ -1,5 +1,4 @@
 Flask>=3.0,<4.0
-gunicorn>=21.0,<24.0
 flask-socketio>=5.3,<6.0
 eventlet>=0.35
 mysql-connector-python>=9.0

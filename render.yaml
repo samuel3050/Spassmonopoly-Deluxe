@@ -4,8 +4,10 @@ services:
     runtime: python
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT game:app
+    startCommand: python game.py
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.9"
       - key: FLASK_SECRET_KEY
         generateValue: true
       - key: FLASK_DEBUG

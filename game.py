@@ -74,11 +74,11 @@ logging.basicConfig(
 app.logger.setLevel(LOG_LEVEL)
 
 if SocketIO is not None:
-    # On Render (and other Linux production hosts) eventlet is required for
-    # gunicorn. Locally on Windows we keep threading because eventlet
-    # monkey-patching is fragile there and causes the client to get stuck.
-    _async_mode = "eventlet" if os.getenv("RENDER") else "threading"
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode=_async_mode)
+    # "threading" mode runs on the built-in Werkzeug server and is the most
+    # reliable everywhere: eventlet/gevent monkey-patching clashes with the
+    # SQLAlchemy connection pool (and is broken on Python 3.14). Socket.IO falls
+    # back to HTTP long-polling, which is plenty fast for a lobby.
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 else:
     socketio = None
 
