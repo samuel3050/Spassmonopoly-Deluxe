@@ -845,54 +845,14 @@ function bindEvents() {
 }
 
 function initSocket() {
-  if (typeof io === "undefined") {
-    pollTimer = window.setInterval(() => refreshState(), 1000);
-    return;
-  }
+  // Realtime state sync uses short HTTP polling instead of a long-lived
+  // Socket.IO connection. On a single free hosting instance the Socket.IO
+  // long-poll/websocket transport ties up the server and makes the next
+  // request hang (the board froze after every action until a page reload).
+  // Polling /api/state is cheap, never blocks, and keeps every client in sync.
   const dotEl = document.getElementById("connectionDot");
-  socket = io({ transports: ["websocket", "polling"] });
-
-  socket.on("connect", () => {
-    dotEl?.classList.add("connected");
-    const playerId = state.canonicalState?.players?.[state.aktiver]?.id;
-    if (playerId) socket.emit("client_identify", { player_id: playerId });
-    setInterval(() => socket.emit("ping"), 15000);
-  });
-
-  socket.on("disconnect", () => {
-    dotEl?.classList.remove("connected");
-  });
-
-  socket.on("game_state_update", (data) => {
-    if (busy) return;
-    const sig = getStateSignature(data.state);
-    if (sig !== lastSignature) {
-      const previousPhase = state.phase;
-      const previousRoll = state.displayRoll;
-      setState(data.state);
-      lastSignature = sig;
-      if (data.state.phase === "move" && previousPhase !== "move" && data.state.displayRoll && JSON.stringify(previousRoll) !== JSON.stringify(data.state.displayRoll)) {
-        animateDice(data.state.displayRoll);
-      }
-    }
-  });
-
-  socket.on("settings_update", (data) => {
-    applyUserSettings(data.settings);
-  });
-
-  socket.on("host_migrated", (data) => {
-    const myPlayerId = state.canonicalState?.players?.find((p) => p.id === state.canonicalState?.identity?.host_id)?.id;
-    if (data.new_host_id === myPlayerId) {
-      showToast("Du bist jetzt der Host.");
-    }
-    refreshState({ silent: true });
-  });
-
-  socket.on("lobby_closed", (data) => {
-    showToast(data.reason || "Host hat die Verbindung getrennt.");
-    window.setTimeout(() => { window.location.href = "/menu"; }, 2500);
-  });
+  dotEl?.classList.add("connected");
+  pollTimer = window.setInterval(() => refreshState({ silent: true }), 1200);
 }
 
 function bootBoard() {

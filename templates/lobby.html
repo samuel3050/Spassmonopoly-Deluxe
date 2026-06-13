@@ -142,36 +142,16 @@
       return "";
     }
 
-    /* ── Socket.IO live updates (polling fallback if socket is down) ── */
-    let socketConnected = false;
-    const socket = io({ transports: ["polling", "websocket"] });
+    /* ── Live updates via HTTP polling ──
+       A long-lived Socket.IO connection ties up the single free hosting
+       instance and makes subsequent requests hang, so the lobby polls
+       /lobby/state instead. renderLobby() already redirects into the game
+       once data.game_started is set, so the start handoff still works. */
+    const socket = { emit() {}, on() {}, io: null };  // no-op stub for legacy call sites
 
-    socket.on("connect", () => {
-      socketConnected = true;
-      setConn(true);
-      if (currentPlayerId) socket.emit("client_identify", { player_id: currentPlayerId });
-      updateLobby();
-    });
-    socket.on("disconnect", () => { socketConnected = false; setConn(false); });
-    socket.io?.on?.("reconnect_attempt", () => setConn(false));
-    socket.on("lobby_update", renderLobby);
-    socket.on("game_started", (data) => {
-      showStatus("Spiel wird geöffnet.", "success");
-      window.setTimeout(() => { window.location.href = data.redirect_url || "/board"; }, 350);
-    });
-    socket.on("host_migrated", (data) => {
-      if (data.new_host_id === currentPlayerId) showStatus("Du bist jetzt der Host.", "success");
-    });
-    socket.on("lobby_closed", (data) => {
-      showStatus(data.reason || "Lobby geschlossen.", "warning");
-      window.setTimeout(() => { window.location.href = "/menu"; }, 2500);
-    });
-    socket.on("settings_update", (data) => { audio?.setSettings?.(data.settings); applyTheme(data.settings); });
-    window.setInterval(() => socket.emit("ping"), 15000);
-
-    // Safety net: while the realtime socket is not connected, poll so the lobby
-    // always reflects other players. When the socket is live, this stays quiet.
-    window.setInterval(() => { if (!socketConnected) updateLobby(); }, 2500);
+    setConn(true);
+    updateLobby();
+    window.setInterval(updateLobby, 1500);
 
     function setConn(ok) {
       document.getElementById("connDot")?.classList.toggle("on", ok);
