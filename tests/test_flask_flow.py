@@ -52,7 +52,7 @@ class FlaskGameFlowTests(unittest.TestCase):
         self.assertTrue({"games", "players", "game_states", "logs", "cards", "settings"}.issubset(tables))
 
     def test_local_game_http_flow_and_save_list(self):
-        response = self.client.post("/", data={"anzahl": "2"})
+        response = self.client.post("/menu", data={"anzahl": "2"})
         self.assertEqual(response.status_code, 302)
         self.assertIn("/namen", response.headers["Location"])
 
@@ -147,7 +147,7 @@ class FlaskGameFlowTests(unittest.TestCase):
 
         exited = self.client.post("/api/exit-game", json={"mode": "save"}).get_json()
         self.assertTrue(exited["ok"])
-        self.assertEqual(exited["redirect_url"], "/")
+        self.assertEqual(exited["redirect_url"], "/menu")
 
     def test_settings_api_persists_global_preferences(self):
         saved = self.client.post(
@@ -244,7 +244,7 @@ class FlaskGameFlowTests(unittest.TestCase):
         self.assertEqual(guest_delete_attempt.status_code, 403)
         self.assertFalse(guest_delete_attempt.get_json()["ok"])
 
-        response = host_client.post("/", data={"anzahl": "2"})
+        response = host_client.post("/menu", data={"anzahl": "2"})
         self.assertEqual(response.status_code, 302)
         self.assertIn("/namen", response.headers["Location"])
         response = host_client.post("/namen", data={"spieler1": "Neu A", "spieler2": "Neu B"})

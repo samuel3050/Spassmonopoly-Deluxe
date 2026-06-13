@@ -1105,7 +1105,17 @@ def api_settings():
         return json_error(f"Einstellungen konnten nicht gespeichert werden: {str(e)}", 500)
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
+def shell():
+    """Persistent top-level frame: hosts the looping background music and embeds
+    the actual app pages in a full-viewport iframe, so audio never stops when the
+    inner pages navigate or reload."""
+    with app.app_context():
+        settings = GameSaveService.get_global_settings()
+    return render_template("shell.html", settings=settings)
+
+
+@app.route("/menu", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         with state_lock:
@@ -1332,7 +1342,9 @@ def namen():
             create_new_game(ROOM_ID, players)
         return redirect(url_for("spiel"))
 
-    return render_template("spielernamen.html", anzahl=session["anzahl"])
+    with app.app_context():
+        settings = GameSaveService.get_global_settings()
+    return render_template("spielernamen.html", anzahl=session["anzahl"], settings=settings)
 
 
 @app.route("/board", methods=["GET"])

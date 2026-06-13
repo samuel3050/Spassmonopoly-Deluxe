@@ -1,4 +1,4 @@
-from .game_engine import clean_display_text, get_field_type, normalize_event_log
+from .game_engine import START_BONUS, clean_display_text, get_field_type, normalize_event_log
 
 
 def get_popup_hint(field, active_player=None):
@@ -7,22 +7,22 @@ def get_popup_hint(field, active_player=None):
 
     field_type = get_field_type(field)
     if field["ist_kaufbar"] and not field.get("besitzer"):
-        return f"Dieses Feld ist frei. Du kannst es jetzt für {field.get('kaufpreis') or '0'} sichern."
+        return f"Dieses Feld ist frei. Du kannst es für {field.get('kaufpreis') or '0 Punkte'} kaufen."
     if field.get("besitzer"):
         if active_player and (
             field.get("owner_player_id") == active_player.get("id")
             or field.get("besitzer") == active_player.get("name")
         ):
-            return "Das ist dein eigenes Feld. Du kannst den Zug ohne Abgabe abschliessen."
-        return f"Dieses Feld gehört {field['besitzer']}. Die Abgabe von {field.get('miete') or '0'} wird jetzt fällig."
+            return "Das ist dein eigenes Feld. Du kannst den Zug ohne Zahlung abschliessen."
+        return f"Dieses Feld gehört {field['besitzer']}. Die Miete von {field.get('miete') or '0 Punkte'} wird jetzt fällig."
     if field_type == "gemeinschaft":
         return "Dieses Gemeinschaftsfeld löst ein zufälliges Ereignis für dich oder die ganze Runde aus."
     if field_type == "steuer":
-        return f"Dieses Feld verlangt eine feste Abgabe von {field.get('miete') or '0'}."
+        return f"Dieses Feld verlangt eine Steuer von {field.get('miete') or '0 Punkte'}."
     if field_type == "gefangnis":
-        return "Dieses Feld verhängt eine Spielstrafe in Form von 2 zusätzlichen Aktionspunkten."
+        return "Dieses Feld ist ein Pflichtstopp ohne Punkteänderung."
     if field_type == "los":
-        return "Auf Los darfst du 1 Aktionspunkt abziehen."
+        return f"Beim Passieren von Los erhältst du {START_BONUS} Punkte."
     if field_type == "spezial":
         return field.get("zusatz_regel") or "Dieses Spezialfeld hat einen eigenen Effekt."
     return field.get("zusatz_regel")
@@ -76,7 +76,7 @@ def get_scoreboard(game_state):
                 "name": player["name"],
                 "position": current_field["name"],
                 "positionIndex": position_index,
-                "drinks": player.get("action_points", 0),
+                "points": player.get("action_points", 0),
                 "steps": player.get("total_steps", 0),
                 "properties": owner_counts.get(player["name"], 0),
                 "is_active": index == active_index,

@@ -177,16 +177,111 @@
 
     </section>
 
-    <section class="menu-panel home-view about-view bg-white shadow-xl ring-1 ring-slate-200" data-home-view="about" hidden>
-      <div class="hero-badge">Produkt</div>
-      <h2>Spassmonopoly Deluxe</h2>
-      <p class="panel-copy">Ein robuster digitaler Spieltisch für lokale Runden, Lobby-Spiel und gespeicherte Sessions. Kernlogik, Saves und Logs laufen serverseitig, die Oberfläche priorisiert schnelle Entscheidungen am Tisch.</p>
-      <div class="feature-row compact-features">
-        <span class="feature-pill">Flask</span>
-        <span class="feature-pill">SQLAlchemy</span>
-        <span class="feature-pill">Save Manager</span>
-        <span class="feature-pill">Responsive Board</span>
-      </div>
+    <section class="home-view about-view about-layout" data-home-view="about" hidden>
+      <section class="menu-panel about-hero bg-white shadow-xl ring-1 ring-slate-200">
+        <div class="about-hero-copy">
+          <div class="hero-badge">Über das Spiel</div>
+          <h2>Spassmonopoly Deluxe</h2>
+          <p class="panel-copy">Ein digitaler Spieltisch für den klassischen Brettspielabend: Würfeln, Felder kaufen, Mieten kassieren und Karten ziehen – lokal an einem Gerät oder gemeinsam in der Online-Lobby. Jeder Zug, jeder Besitz und jedes Log wird serverseitig gespeichert und beim Laden exakt wiederhergestellt.</p>
+          <div class="about-cta">
+            <a class="primary-btn" data-home-tab="play" href="#play">Jetzt spielen</a>
+            <a class="secondary-link" href="{{ url_for('lobby_page') }}">Online-Lobby öffnen</a>
+          </div>
+        </div>
+        <div class="about-stats">
+          <article class="stat-card">
+            <span class="stat-label">Spieler</span>
+            <strong class="stat-value">2 – 8</strong>
+            <span class="stat-meta">pro Runde</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Modus</span>
+            <strong class="stat-value">Lokal &amp; Online</strong>
+            <span class="stat-meta">Lobby-Sync</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Spielstände</span>
+            <strong class="stat-value">{{ saves|length }}</strong>
+            <span class="stat-meta">gespeichert</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="menu-panel about-features bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="panel-heading compact-heading">
+          <div>
+            <span class="panel-kicker">Funktionen</span>
+            <h3>Alles für den Spieltisch</h3>
+          </div>
+        </div>
+        <div class="about-feature-grid">
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">🎲</span>
+            <strong>Lokales Spiel</strong>
+            <p>2 bis 8 Spieler an einem Gerät – reihum würfeln, ziehen und handeln.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">🌐</span>
+            <strong>Online-Lobby</strong>
+            <p>Gemeinsam beitreten, bereitmelden und live synchron starten.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">💾</span>
+            <strong>Save Manager</strong>
+            <p>Runden benennen, laden, duplizieren oder löschen – jederzeit.</p>
+          </article>
+          <article class="about-card">
+            <span class="about-card-icon" aria-hidden="true">📜</span>
+            <strong>Live-Verlauf</strong>
+            <p>Jeder Wurf, jede Karte und jede Strafe landet im durchsuchbaren Log.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="menu-panel about-how bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="panel-heading compact-heading">
+          <div>
+            <span class="panel-kicker">So geht's</span>
+            <h3>In drei Schritten loslegen</h3>
+          </div>
+        </div>
+        <ol class="about-steps">
+          <li>
+            <span class="about-step-num">1</span>
+            <div>
+              <strong>Runde starten</strong>
+              <p>Spieleranzahl wählen und „Lokales Spiel" drücken – oder die Lobby öffnen.</p>
+            </div>
+          </li>
+          <li>
+            <span class="about-step-num">2</span>
+            <div>
+              <strong>Ziehen &amp; entscheiden</strong>
+              <p>Würfeln, über das Brett ziehen und beim Feld kaufen, zahlen oder Karte ziehen.</p>
+            </div>
+          </li>
+          <li>
+            <span class="about-step-num">3</span>
+            <div>
+              <strong>Speichern &amp; fortsetzen</strong>
+              <p>Jederzeit benannt speichern und später nahtlos weiterspielen.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="menu-panel about-tech bg-white shadow-lg ring-1 ring-slate-200">
+        <div class="about-tech-copy">
+          <span class="panel-kicker">Unter der Haube</span>
+          <p class="panel-copy">Serverseitige Spiellogik mit persistenten Spielständen und Echtzeit-Updates über WebSockets.</p>
+        </div>
+        <div class="feature-row compact-features">
+          <span class="feature-pill">Flask</span>
+          <span class="feature-pill">SQLAlchemy</span>
+          <span class="feature-pill">Socket.IO</span>
+          <span class="feature-pill">Responsive Board</span>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -234,6 +329,10 @@
       document.body.classList.toggle("theme-dark", settings.theme !== "light");
       document.body.classList.toggle("reduce-motion", settings.animations === "off");
       document.documentElement.style.setProperty("--motion-speed", settings.speed === "slow" ? "1.45" : settings.speed === "fast" ? "0.65" : settings.speed === "instant" ? "0.05" : "1");
+      // Forward audio settings to the persistent shell that owns the music.
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "sm-settings", settings }, window.location.origin);
+      }
     }
 
     function escapeHtml(value) {
@@ -437,18 +536,9 @@
     document.addEventListener("click", (event) => {
       if (event.target.closest("button,a")) {
         audio.unlock();
-        audio.startMusic();
         audio.play("button");
       }
     });
-    document.addEventListener("pointerdown", () => {
-      audio.unlock();
-      audio.startMusic();
-    }, { once: true });
-    document.addEventListener("keydown", () => {
-      audio.unlock();
-      audio.startMusic();
-    }, { once: true });
 
     document.getElementById("saveActionModal").addEventListener("click", (event) => {
       if (event.target.id === "saveActionModal") closeSaveAction();
@@ -477,6 +567,9 @@
       document.querySelector(`[data-home-tab="${initialTab}"]`)?.click();
     }
     applySettings(readSettingsForm());
-  </script>
+
+    // Background music runs as one continuous loop across pages.
+    audio.enableContinuousPlayback();
+</script>
 </body>
 </html>

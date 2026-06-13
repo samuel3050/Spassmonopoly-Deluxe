@@ -26,7 +26,7 @@
             <input type="radio" name="player_id" value="{{ player.id }}" required {% if loop.first %}checked{% endif %}>
             <span>
               <strong>{{ player.name }}</strong>
-              <small>Feld {{ player.position + 1 }} · {{ player.action_points }} AP</small>
+              <small>Feld {{ player.position + 1 }} · {{ player.action_points }} Punkte</small>
             </span>
           </label>
           {% endfor %}

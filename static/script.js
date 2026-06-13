@@ -136,15 +136,19 @@ function getInsightCopy(field) {
 }
 
 function scoreCardMarkup(entry, index) {
+  const isOut = entry.status === "bankrupt";
+  const chip = isOut
+    ? '<span class="status-chip status-chip-out">Pleite</span>'
+    : (entry.is_active ? '<span class="status-chip status-chip-hot">Am Zug</span>' : "");
   return `
-    <article class="score-card${entry.is_active ? " is-active" : ""}">
+    <article class="score-card${entry.is_active ? " is-active" : ""}${isOut ? " is-out" : ""}">
       <div class="score-topline">
         <span class="player-dot p${index + 1}"></span>
         <strong>${escapeHtml(entry.name)}</strong>
-        ${entry.is_active ? '<span class="status-chip status-chip-hot">Am Zug</span>' : ""}
+        ${chip}
       </div>
       <div class="score-metrics">
-        <span>AP <strong>${escapeHtml(entry.drinks)}</strong></span>
+        <span>Punkte <strong>${escapeHtml(entry.points)}</strong></span>
         <span>Felder <strong>${escapeHtml(entry.properties)}</strong></span>
         <span>Schritte <strong>${escapeHtml(entry.steps)}</strong></span>
       </div>
@@ -204,7 +208,7 @@ function buildFieldActions(field) {
     `;
   }
   if (field.besitzer && field.besitzer !== activePlayerName) {
-    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Abgabe bestätigen</button>`;
+    return `<button type="button" class="primary-btn" onclick="handleFieldAction('miete', ${field.feld_id})">Miete zahlen</button>`;
   }
   if (isSpecialActionField(field)) {
     return `<button type="button" class="primary-btn" onclick="handleFieldAction('skip', ${field.feld_id})">Effekt auslösen</button>`;
@@ -225,8 +229,7 @@ function createFieldDetails(field) {
       <div class="modal-row"><span>Typ</span><strong>${escapeHtml(field.typ)}</strong></div>
       <div class="modal-row"><span>Status</span><strong>${escapeHtml(owner)}</strong></div>
       <div class="modal-row"><span>Preis</span><strong>${escapeHtml(field.kaufpreis || "-")}</strong></div>
-      <div class="modal-row"><span>Abgabe</span><strong>${escapeHtml(field.miete || "-")}</strong></div>
-      <div class="modal-row"><span>Bonus</span><strong>${escapeHtml(field.alkohol_typ || "-")} / ${escapeHtml(field.alkohol_menge || "-")}</strong></div>
+      <div class="modal-row"><span>Miete</span><strong>${escapeHtml(field.miete || "-")}</strong></div>
     </div>
     <div class="modal-note">${escapeHtml(note)}</div>
     <div class="modal-actions">${buildFieldActions(field)}</div>
@@ -371,9 +374,10 @@ function renderActionPanel() {
   `;
   refs.commandActions.innerHTML = buildPrimaryActionMarkup("center");
   if (refs.actionMirror) {
+    // Informational mirror only — the single actionable button lives on the
+    // board centre so there is exactly one place to act.
     refs.actionMirror.innerHTML = `
       <div class="action-mirror-copy">${escapeHtml(getActionCopy())}</div>
-      ${buildPrimaryActionMarkup("mirror")}
     `;
   }
 }
@@ -741,7 +745,7 @@ async function exitGame(mode) {
     debugLog("board", "exit.start", { mode });
     const data = await postJson("/api/exit-game", { mode });
     audio?.play("save");
-    window.location.href = data.redirect_url || "/";
+    window.location.href = data.redirect_url || "/menu";
   } catch (error) {
     showToast(error.message);
     audio?.play("warn");
@@ -801,14 +805,6 @@ function renderAdminVisibility() {
 }
 
 function bindEvents() {
-  document.addEventListener("pointerdown", () => {
-    audio?.unlock();
-    audio?.startMusic();
-  }, { once: true });
-  document.addEventListener("keydown", () => {
-    audio?.unlock();
-    audio?.startMusic();
-  }, { once: true });
   document.addEventListener("click", (event) => {
     if (event.target.closest("button,a")) {
       audio?.unlock();
@@ -895,7 +891,7 @@ function initSocket() {
 
   socket.on("lobby_closed", (data) => {
     showToast(data.reason || "Host hat die Verbindung getrennt.");
-    window.setTimeout(() => { window.location.href = "/"; }, 2500);
+    window.setTimeout(() => { window.location.href = "/menu"; }, 2500);
   });
 }
 
@@ -904,6 +900,7 @@ function bootBoard() {
   audio = new AudioManager(userSettings);
   applyUserSettings();
   bindEvents();
+  audio?.enableContinuousPlayback();
   renderApp();
   lastSignature = getStateSignature(state);
   refreshState({ silent: true });
@@ -918,7 +915,6 @@ function bootBoard() {
 
 document.addEventListener("DOMContentLoaded", bootBoard);
 window.addEventListener("pagehide", () => {
-  audio?.stopMusic();
   socket?.disconnect();
   window.clearInterval(diceTimer);
   window.clearTimeout(toastTimer);

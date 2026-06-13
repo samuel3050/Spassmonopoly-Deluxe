@@ -28,18 +28,24 @@ COLOR_MAP = {
     "rainbow": "linear-gradient(135deg, #ffd25f, #ff9c6b, #ff7fb4)",
 }
 
+# Punkte/Geld economy: every player starts with STARTING_POINTS and earns
+# START_BONUS each time they pass or land on "Los". Buying a field costs its
+# price, rent is transferred from the visitor to the owner.
+STARTING_POINTS = 30
+START_BONUS = 4
+
 SPECIAL_FIELD_RULES = {
-    10: {"delta_self": -2, "message": "Ideenjoker: Du darfst 2 Aktionspunkte abziehen."},
-    20: {"delta_self": -1, "message": "Ruheoase: Du darfst 1 Aktionspunkt abziehen."},
-    30: {"delta_all": -1, "message": "Fairplay-Zentrale: Allen wird 1 Aktionspunkt erlassen."},
-    40: {"delta_all": 1, "message": "Finale der Freude: Alle bekommen 1 zusätzlichen Aktionspunkt."},
+    10: {"delta_self": 2, "message": "Ideenjoker: Du erhältst 2 Punkte."},
+    20: {"delta_self": 1, "message": "Ruheoase: Du erhältst 1 Punkt."},
+    30: {"delta_all": 1, "message": "Fairplay-Zentrale: Alle erhalten 1 Punkt."},
+    40: {"delta_all": 2, "message": "Finale der Freude: Alle erhalten 2 Punkte."},
 }
 
 GEMEINSCHAFT_EFFECTS = [
-    {"title": "Glück gehabt", "delta_self": -2, "message": "Du darfst dir 2 Aktionspunkte abziehen."},
-    {"title": "Pech gehabt", "delta_self": 2, "message": "Du bekommst 2 Aktionspunkte dazu."},
-    {"title": "Eine Runde für alle", "delta_all": 1, "message": "Jeder bekommt 1 Aktionspunkt."},
-    {"title": "Gute Stimmung", "delta_all": -1, "message": "Allen wird 1 Aktionspunkt erlassen."},
+    {"title": "Glück gehabt", "delta_self": 2, "message": "Du erhältst 2 Punkte."},
+    {"title": "Pech gehabt", "delta_self": -2, "message": "Du verlierst 2 Punkte."},
+    {"title": "Eine Runde für alle", "delta_all": 1, "message": "Jeder erhält 1 Punkt."},
+    {"title": "Gute Stimmung", "delta_all": 1, "message": "Jeder erhält 1 Punkt."},
     {"title": "Durchatmen", "message": "Nichts passiert. Atmet tief durch."},
 ]
 
@@ -113,6 +119,24 @@ def clamp_points(player, delta):
     player["action_points"] = max(0, int(player.get("action_points", 0)) + int(delta))
 
 
+def eliminate_player(state, player_index):
+    """Mark a player as bankrupt, zero their points and release their fields."""
+    player = state["players"][player_index]
+    player["status"] = "bankrupt"
+    player["action_points"] = 0
+    player_id = player.get("id")
+    player_name = player.get("name")
+    for field in state.get("board", {}).get("fields", []):
+        if field.get("owner_player_id") == player_id or field.get("besitzer") == player_name:
+            field["besitzer"] = None
+            field["owner_player_id"] = None
+    return state
+
+
+def active_players(state):
+    return [player for player in state.get("players", []) if player.get("status") != "bankrupt"]
+
+
 def ensure_field_shape(fields):
     normalized = []
     for index, field in enumerate(fields):
@@ -125,8 +149,6 @@ def ensure_field_shape(fields):
                 "miete": clean_display_text(field.get("miete")),
                 "farbe": clean_display_text(field.get("farbe", "Dunkelgrau")),
                 "farbe_css": COLOR_MAP.get(normalize_text(field.get("farbe")), "#9fb7a3"),
-                "alkohol_typ": clean_display_text(field.get("alkohol_typ", "Bonus")),
-                "alkohol_menge": clean_display_text(field.get("alkohol_menge", "0")),
                 "zusatz_regel": clean_display_text(field.get("zusatz_regel")),
                 "besitzer": clean_display_text(field.get("besitzer")),
                 "owner_player_id": field.get("owner_player_id"),
@@ -240,7 +262,7 @@ def init_game(config):
                 "id": f"player-{index + 1}",
                 "name": name,
                 "position": 0,
-                "action_points": 0,
+                "action_points": STARTING_POINTS,
                 "total_steps": 0,
                 "status": "active",
             }
@@ -369,8 +391,11 @@ def move_player(game_state, steps=None):
 
     movement = int(steps)
     start_position = int(active_player.get("position", 0))
+    passed_start = movement > 0 and (start_position + movement) >= len(fields)
     active_player["position"] = (start_position + movement) % len(fields)
     active_player["total_steps"] = int(active_player.get("total_steps", 0)) + movement
+    if passed_start:
+        clamp_points(active_player, START_BONUS)
     state["players"][active_index] = active_player
     state["pending_action"] = {
         "player_index": active_index,
@@ -381,7 +406,7 @@ def move_player(game_state, steps=None):
     }
     state["dice"]["current_roll"] = None
     _set_phase(state, "field_action")
-    return push_event(
+    state = push_event(
         state,
         f"{active_player['name']} zieht von Feld {start_position + 1} auf Feld {active_player['position'] + 1}: {fields[active_player['position']]['name']}.",
         event_type="movement",
@@ -390,6 +415,15 @@ def move_player(game_state, steps=None):
         field_id=fields[active_player["position"]]["feld_id"],
         data={"from": start_position, "to": active_player["position"], "steps": movement},
     )
+    if passed_start:
+        state = push_event(
+            state,
+            f"{active_player['name']} passiert Los und erhält {START_BONUS} Punkte.",
+            event_type="card_event",
+            severity="success",
+            player_id=active_player["id"],
+        )
+    return state
 
 
 def apply_non_property_effect(state, field, active_index):
@@ -397,8 +431,8 @@ def apply_non_property_effect(state, field, active_index):
     player = state["players"][active_index]
 
     if field_type == "los":
-        clamp_points(player, -1)
-        return f"{player['name']} landet auf Los und darf 1 Aktionspunkt abziehen."
+        # The Los bonus is granted in move_player when the field is passed/reached.
+        return f"{player['name']} steht auf Los."
 
     if field_type == "gemeinschaft":
         community = state.setdefault("cards", default_cards()).setdefault("gemeinschaft", default_cards()["gemeinschaft"])
@@ -428,12 +462,12 @@ def apply_non_property_effect(state, field, active_index):
 
     if field_type == "steuer":
         amount = parse_number(field.get("miete"))
-        clamp_points(player, amount)
-        return f"{player['name']} zahlt auf {field['name']} {field.get('miete') or '0'}."
+        paid = min(int(player.get("action_points", 0)), amount)
+        clamp_points(player, -paid)
+        return f"{player['name']} zahlt auf {field['name']} {paid} Punkte Steuer."
 
     if field_type == "gefangnis":
-        clamp_points(player, 2)
-        return f"{player['name']} macht auf {field['name']} einen Pflichtstopp und bekommt 2 Aktionspunkte."
+        return f"{player['name']} macht auf {field['name']} einen Pflichtstopp."
 
     if field_type == "spezial":
         rule = SPECIAL_FIELD_RULES.get(int(field["feld_id"]))
@@ -476,26 +510,48 @@ def apply_field_effect(game_state, action="skip", field_id=None):
             raise ValueError("Dieses Feld kann nicht gesichert werden.")
         if field.get("besitzer"):
             raise ValueError("Dieses Feld gehört bereits jemandem.")
+        price = parse_number(field.get("kaufpreis"))
+        if int(active_player.get("action_points", 0)) < price:
+            raise ValueError(f"Nicht genug Punkte: {field['name']} kostet {field.get('kaufpreis') or '0 Punkte'}.")
 
         field["besitzer"] = active_player["name"]
         field["owner_player_id"] = active_player["id"]
-        clamp_points(active_player, parse_number(field.get("kaufpreis")))
-        message = f"{active_player['name']} sichert sich {field['name']} für {field.get('kaufpreis') or '0'}."
+        clamp_points(active_player, -price)
+        message = (
+            f"{active_player['name']} kauft {field['name']} für {field.get('kaufpreis') or '0 Punkte'} "
+            f"(Rest: {active_player['action_points']} Punkte)."
+        )
         event_type = "field_purchase"
         severity = "success"
 
     elif action == "miete":
         is_own_field = field.get("owner_player_id") == active_player["id"] or field.get("besitzer") == active_player["name"]
         if not field.get("besitzer") or is_own_field:
-            raise ValueError("Auf diesem Feld ist keine Abgabe fällig.")
+            raise ValueError("Auf diesem Feld ist keine Miete fällig.")
 
-        clamp_points(active_player, parse_number(field.get("miete")))
-        message = (
-            f"{active_player['name']} bestätigt auf {field['name']} "
-            f"die Abgabe von {field.get('miete') or '0'} an {field['besitzer']}."
+        amount = parse_number(field.get("miete"))
+        points = int(active_player.get("action_points", 0))
+        paid = min(points, amount)
+        clamp_points(active_player, -paid)
+        owner = next(
+            (p for p in state["players"] if p.get("id") == field.get("owner_player_id") or p.get("name") == field.get("besitzer")),
+            None,
         )
-        event_type = "penalty"
-        severity = "warning"
+        if owner is not None:
+            clamp_points(owner, paid)
+        if points < amount:
+            # Cannot cover the rent: pay everything, then drop out of the game.
+            eliminate_player(state, active_index)
+            message = (
+                f"{active_player['name']} kann die Miete von {amount} Punkten an {field['besitzer']} "
+                f"nicht zahlen und scheidet aus."
+            )
+            event_type = "penalty"
+            severity = "error"
+        else:
+            message = f"{active_player['name']} zahlt {paid} Punkte Miete an {field['besitzer']}."
+            event_type = "penalty"
+            severity = "warning"
 
     elif action == "skip":
         message = apply_non_property_effect(state, field, active_index)
@@ -523,6 +579,22 @@ def apply_field_effect(game_state, action="skip", field_id=None):
 
 def maybe_finish_game(game_state):
     state = copy.deepcopy(game_state)
+    players = state.get("players", [])
+
+    # Last player standing wins as soon as everyone else is bankrupt.
+    remaining = active_players(state)
+    if len(players) > 1 and len(remaining) == 1:
+        winner = remaining[0]
+        state.setdefault("game", {})["status"] = "finished"
+        state["game"]["phase"] = "finished"
+        return push_event(
+            state,
+            f"{winner['name']} gewinnt die Runde - alle anderen sind ausgeschieden.",
+            event_type="winner",
+            severity="success",
+            player_id=winner["id"],
+        )
+
     fields = state.get("board", {}).get("fields", [])
     buyable_fields = [field for field in fields if field.get("ist_kaufbar")]
     settings = state.get("settings", default_settings())
@@ -539,12 +611,11 @@ def maybe_finish_game(game_state):
         owner_key = field.get("owner_player_id") or field.get("besitzer")
         owner_counts[owner_key] = owner_counts.get(owner_key, 0) + 1
 
-    players = state.get("players", [])
     winner = max(
-        players,
+        remaining or players,
         key=lambda player: (
             owner_counts.get(player.get("id"), owner_counts.get(player.get("name"), 0)),
-            -int(player.get("action_points", 0)),
+            int(player.get("action_points", 0)),
             int(player.get("total_steps", 0)),
         ),
     )
@@ -571,11 +642,17 @@ def next_turn(game_state):
         raise ValueError("Das Spiel hat keine Spieler.")
 
     active_index = int(state.get("active_player_index", 0))
-    next_active = (active_index + 1) % len(players)
+    count = len(players)
+    next_active = active_index
+    for _ in range(count):
+        next_active = (next_active + 1) % count
+        if players[next_active].get("status") != "bankrupt":
+            break
+    wrapped = next_active <= active_index
     state["active_player_index"] = next_active
     state.setdefault("game", {})["turn_number"] = int(state["game"].get("turn_number", 1)) + 1
 
-    if next_active == 0:
+    if wrapped:
         state["game"]["round"] = int(state["game"].get("round", 1)) + 1
         return push_event(
             state,

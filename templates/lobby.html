@@ -164,7 +164,7 @@
     });
     socket.on("lobby_closed", (data) => {
       showStatus(data.reason || "Lobby geschlossen.", "warning");
-      window.setTimeout(() => { window.location.href = "/"; }, 2500);
+      window.setTimeout(() => { window.location.href = "/menu"; }, 2500);
     });
     socket.on("settings_update", (data) => { audio?.setSettings?.(data.settings); applyTheme(data.settings); });
     window.setInterval(() => socket.emit("ping"), 15000);
@@ -352,20 +352,15 @@
     // Initial load (one request). Live updates afterwards come via Socket.IO.
     updateLobby();
 
-    document.addEventListener("pointerdown", () => {
-      audio.unlock();
-      audio.startMusic();
-    }, { once: true });
-    document.addEventListener("keydown", () => {
-      audio.unlock();
-      audio.startMusic();
-    }, { once: true });
     document.addEventListener("click", (event) => {
       if (event.target.closest("button,a")) {
         audio.unlock();
         audio.play("button");
       }
     });
+
+    // Background music runs as one continuous loop across pages.
+    audio.enableContinuousPlayback();
   </script>
 </body>
 </html>

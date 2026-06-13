@@ -11,6 +11,12 @@ class AudioManager {
     this.master = null;
     this.music = null;
     this.started = false;
+    this._audioEl = null;
+    this._playlist = null;
+    this._trackIndex = 0;
+    this._musicStarting = false;
+    this._lastPersist = 0;
+    this._storageKey = "sm_music_state";
   }
 
   setSettings(settings = {}) {
@@ -18,13 +24,12 @@ class AudioManager {
     if (this.master) {
       this.master.gain.value = this.masterVolume();
     }
-    if (this.music) {
-      this.music.gain.gain.value = Math.max(0.0001, this.musicVolume() * 0.12);
-    }
     if (this._audioEl) {
-      this._audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
-    }
-    if (this.started && !this.music && this.masterVolume() && this.musicVolume()) {
+      this._audioEl.volume = this._effectiveMusicVolume();
+      if (this._effectiveMusicVolume() > 0 && this._audioEl.paused) {
+        this._tryPlay();
+      }
+    } else if (this.masterVolume() > 0 && this.musicVolume() > 0) {
       this.startMusic();
     }
   }
@@ -87,143 +92,169 @@ class AudioManager {
     }
   }
 
-  async startMusic() {
-    if (!this.masterVolume() || !this.musicVolume() || this.music) return;
-    try {
-      const context = this.ensureContext();
-      const gain = context.createGain();
-      gain.gain.value = Math.max(0.0001, this.musicVolume() * 0.12);
-      gain.connect(this.master);
+  // Background music runs through a plain <audio> element (decoupled from the
+  // Web Audio effects graph) so it keeps looping reliably and can resume across
+  // page navigations via a persisted playback position.
+  _effectiveMusicVolume() {
+    return Math.max(0, Math.min(1, this.masterVolume() * this.musicVolume()));
+  }
 
-      let tracks = [];
-      try {
-        const resp = await fetch('/api/music/playlist');
-        if (resp.ok) {
-          const data = await resp.json();
-          tracks = data.tracks || [];
-        }
-      } catch (e) {
-        tracks = [];
-      }
-
-      if (!tracks.length) {
-        this._startAmbientFallback(context, gain);
-        return;
-      }
-
-      this._playlist = [...tracks].sort(() => Math.random() - 0.5);
-      this._trackIndex = 0;
-      this._musicContext = context;
-      this._musicGain = gain;
-      this.music = { gain, playlist: this._playlist };
-      this._playNextTrack();
-    } catch (error) {
-      return;
+  _tryPlay() {
+    if (!this._audioEl) return;
+    const promise = this._audioEl.play();
+    if (promise && typeof promise.catch === "function") {
+      // Autoplay can be blocked until the first user gesture; the global
+      // interaction listeners retry startMusic(), so swallow the rejection.
+      promise.catch(() => {});
     }
   }
 
-  _playNextTrack() {
-    if (!this._playlist || !this._playlist.length) return;
-    try {
-      if (this._audioEl) {
-        try { this._audioEl.pause(); } catch (e) {}
-        try { this._audioElSource?.disconnect(); } catch (e) {}
-        this._audioEl = null;
-      }
-      const url = this._playlist[this._trackIndex];
-      const audioEl = new Audio(url);
-      audioEl.crossOrigin = 'anonymous';
-      audioEl.preload = 'auto';
+  // Wires up every realistic resume trigger so background music behaves as one
+  // continuous loop across the multi-page app: it retries on load, on tab focus,
+  // on the first gesture, and on bfcache restores, and saves its position before
+  // each navigation so the next page resumes exactly where this one left off.
+  enableContinuousPlayback() {
+    if (this._continuousBound) return;
+    // The persistent top-level shell owns the looping music. Inside the app
+    // iframe we only play sound effects, so skip music wiring here to avoid a
+    // second, duplicate stream.
+    if (window.self !== window.top) return;
+    this._continuousBound = true;
+    const resume = () => this.startMusic();
+    document.addEventListener("pointerdown", () => { this.unlock(); resume(); }, { once: true });
+    document.addEventListener("keydown", () => { this.unlock(); resume(); }, { once: true });
+    window.addEventListener("pageshow", resume);
+    window.addEventListener("focus", resume);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resume();
+    });
+    window.addEventListener("pagehide", () => this.stopMusic());
+    window.addEventListener("beforeunload", () => this._persistState(true));
+    resume();
+  }
 
-      const context = this._musicContext;
-      const gain = this._musicGain;
-      if (context && gain) {
-        try {
-          const src = context.createMediaElementSource(audioEl);
-          src.connect(gain);
-          this._audioElSource = src;
-        } catch (e) {
-          audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
-        }
-      } else {
-        audioEl.volume = Math.max(0, Math.min(1, this.musicVolume()));
-      }
-
-      audioEl.addEventListener('ended', () => {
-        if (!this.music) return;
-        this._trackIndex = (this._trackIndex + 1) % this._playlist.length;
-        this._playNextTrack();
-      });
-
-      const play = async () => {
-        try {
-          if (context && context.state === 'suspended') await context.resume();
-          await audioEl.play();
-        } catch (e) {
-          // autoplay policy - will retry on next user interaction
-        }
-      };
-      play();
-      this._audioEl = audioEl;
-      if (this.music) this.music.audioEl = audioEl;
-    } catch (e) {
-      this._startAmbientFallback(this._musicContext, this._musicGain);
+  startMusic() {
+    // Looping music belongs to the persistent top-level shell only; inside the
+    // app iframe this is a no-op so there is never a second stream.
+    if (window.self !== window.top) return;
+    if (this._audioEl) {
+      this._tryPlay();
+      return;
     }
+    const cached = this._cachedTracks();
+    if (cached) {
+      // Synchronous path (playlist already known): stays inside the current user
+      // gesture so the autoplay policy is far more likely to permit playback.
+      if (cached.length) this._beginPlayback(cached);
+      return;
+    }
+    this._fetchAndStart();
+  }
+
+  _fetchAndStart() {
+    if (this._musicStarting) return;
+    this._musicStarting = true;
+    fetch("/api/music/playlist")
+      .then((resp) => (resp.ok ? resp.json() : { tracks: [] }))
+      .then((data) => {
+        const tracks = data.tracks || [];
+        this._cacheTracks(tracks);
+        if (tracks.length && !this._audioEl) this._beginPlayback(tracks);
+      })
+      .catch(() => {})
+      .finally(() => { this._musicStarting = false; });
+  }
+
+  _beginPlayback(tracks) {
+    if (this._audioEl || !tracks || !tracks.length) return;
+    this._playlist = tracks;
+    const saved = this._restoreState();
+    this._trackIndex =
+      saved && Number.isInteger(saved.index) && saved.index >= 0 && saved.index < tracks.length
+        ? saved.index
+        : 0;
+    const resumeAt = saved && saved.url === this._playlist[this._trackIndex] ? saved.position || 0 : 0;
+    this._loadTrack(resumeAt);
+  }
+
+  _cachedTracks() {
+    try {
+      const raw = localStorage.getItem("sm_music_tracks");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _cacheTracks(tracks) {
+    try {
+      localStorage.setItem("sm_music_tracks", JSON.stringify(tracks || []));
+    } catch (e) {
+      // storage unavailable; the next page just refetches the playlist.
+    }
+  }
+
+  _loadTrack(startAt = 0) {
+    if (!this._playlist || !this._playlist.length) return;
+    if (this._audioEl) {
+      try { this._audioEl.pause(); } catch (e) {}
+      this._audioEl = null;
+    }
+    const audioEl = new Audio(this._playlist[this._trackIndex]);
+    audioEl.preload = "auto";
+    audioEl.loop = this._playlist.length === 1;
+    audioEl.volume = this._effectiveMusicVolume();
+
+    audioEl.addEventListener("loadedmetadata", () => {
+      if (startAt > 0 && Number.isFinite(audioEl.duration) && startAt < audioEl.duration) {
+        try { audioEl.currentTime = startAt; } catch (e) {}
+      }
+    });
+    audioEl.addEventListener("timeupdate", () => this._persistState());
+    audioEl.addEventListener("ended", () => {
+      if (audioEl.loop) return;
+      this._trackIndex = (this._trackIndex + 1) % this._playlist.length;
+      this._loadTrack(0);
+    });
+
+    this._audioEl = audioEl;
+    this.music = { audioEl };
+    this._tryPlay();
   }
 
   stopMusic() {
-    if (!this.music) return;
-    try {
-      if (this._audioEl) {
-        try { this._audioEl.pause(); } catch (e) {}
-        try { this._audioElSource?.disconnect(); } catch (e) {}
-        this._audioEl = null;
-        this._audioElSource = null;
-      }
-      if (this.music.oscillators) {
-        this.music.oscillators.forEach((osc) => {
-          try { osc.stop(); } catch (e) {}
-        });
-      }
-      try { this.music.gain.disconnect(); } catch (e) {}
-    } finally {
-      this.music = null;
-      this._playlist = null;
-      this._trackIndex = 0;
+    this._persistState(true);
+    if (this._audioEl) {
+      try { this._audioEl.pause(); } catch (e) {}
     }
   }
 
-  createLoopOscillator(context, type, frequency, output) {
-    const oscillator = context.createOscillator();
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-    oscillator.connect(output);
-    return oscillator;
+  _persistState(force = false) {
+    if (!this._audioEl || !this._playlist) return;
+    const now = Date.now();
+    if (!force && now - this._lastPersist < 900) return;
+    this._lastPersist = now;
+    try {
+      localStorage.setItem(
+        this._storageKey,
+        JSON.stringify({
+          index: this._trackIndex,
+          url: this._playlist[this._trackIndex],
+          position: this._audioEl.currentTime || 0,
+          ts: now,
+        })
+      );
+    } catch (e) {
+      // storage may be unavailable (private mode); continuity simply degrades.
+    }
   }
 
-  _startAmbientFallback(context, gain) {
-    if (!context || !gain) return;
+  _restoreState() {
     try {
-      const low = context.createOscillator();
-      low.type = 'sine';
-      low.frequency.value = 60;
-      const mid = context.createOscillator();
-      mid.type = 'triangle';
-      mid.frequency.value = 110;
-      const lp = context.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 800;
-      const padGain = context.createGain();
-      padGain.gain.value = 0.0015 * (this.musicVolume() || 1);
-      low.connect(lp);
-      mid.connect(lp);
-      lp.connect(padGain);
-      padGain.connect(gain);
-      low.start();
-      mid.start();
-      this.music = { gain, oscillators: [low, mid], fallback: true };
+      const raw = localStorage.getItem(this._storageKey);
+      return raw ? JSON.parse(raw) : null;
     } catch (e) {
-      this.music = null;
+      return null;
     }
   }
 

@@ -30,5 +30,18 @@
       </form>
     </section>
   </main>
+
+  <script src="{{ url_for('static', filename='audio.js') }}"></script>
+  <script>
+    const audio = new AudioManager({{ settings|tojson }});
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("button,a")) {
+        audio.unlock();
+        audio.play("button");
+      }
+    });
+    // Keep the background music looping continuously through setup.
+    audio.enableContinuousPlayback();
+  </script>
 </body>
 </html>
