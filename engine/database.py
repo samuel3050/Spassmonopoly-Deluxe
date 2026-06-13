@@ -2,11 +2,34 @@ import os
 from contextlib import contextmanager
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 db = SQLAlchemy()
+
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragmas(dbapi_connection, connection_record):
+    """Make SQLite safe under concurrent threaded access.
+
+    The threaded server plus several clients polling the game state at once
+    causes 'database is locked' errors with the default SQLite settings. WAL
+    mode lets readers and a writer work in parallel, and a generous busy
+    timeout makes any remaining contention wait instead of failing instantly.
+    The check only applies to SQLite; other engines (MySQL) are untouched.
+    """
+    module = type(dbapi_connection).__module__
+    if "sqlite" not in module:
+        return
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
 
 
 def create_database_url():
@@ -29,13 +52,19 @@ def create_database_url():
 
 def init_db(app):
     """Initialize SQLAlchemy with Flask app."""
-    app.config["SQLALCHEMY_DATABASE_URI"] = create_database_url()
+    database_url = create_database_url()
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    engine_options = {
         "pool_pre_ping": True,
         "pool_recycle": 3600,
         "echo": False,
     }
+    if database_url.startswith("sqlite"):
+        # Allow the connection to be shared across the server's worker threads
+        # and wait up to 30s for a lock rather than erroring out immediately.
+        engine_options["connect_args"] = {"check_same_thread": False, "timeout": 30}
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = engine_options
     db.init_app(app)
     return db
 

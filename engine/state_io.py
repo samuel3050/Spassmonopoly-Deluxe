@@ -1,6 +1,10 @@
+import logging
+
 from .game_save_service import GameSaveService
 
 DEFAULT_ROOM_ID = "room_default"
+
+logger = logging.getLogger("spassmonopoly.state_io")
 
 
 def has_save_game(room_id=DEFAULT_ROOM_ID):
@@ -25,6 +29,10 @@ def load_game_state(room_id=DEFAULT_ROOM_ID):
         game_save = GameSaveService.load_save_by_name(room_id)
         return game_save.get_game_state() if game_save else None
     except Exception:
+        # A swallowed error here previously surfaced to the player as
+        # "Das Spiel wurde noch nicht gestartet"; log it so real DB problems
+        # (e.g. a locked database) are diagnosable instead of silent.
+        logger.exception("load_game_state failed for room_id=%s", room_id)
         return None
 
 
